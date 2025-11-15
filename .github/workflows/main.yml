@@ -6,7 +6,7 @@ on:
     - cron: '0 */6 * * *'  # 每6小时运行一次
 
 env:
-  WEBSITES: '[
+  WEBSITES: '[ 
     {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
     {"name": "PornTV", "url": "https://fluffy-hedy-situ-e8e2da56.koyeb.app"},
     {"name": "我的博客", "url": "https://situ.eu.org"},
@@ -23,23 +23,26 @@ jobs:
     - name: 检查网站状态
       id: check
       run: |
-        websites=$(echo $WEBSITES | jq -r '.[]')
+        # 使用 jq 将 JSON 字符串解析为数组
+        websites=$(echo $WEBSITES | jq -c '.[]')
         current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
-        current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d   %H:%M:%S")
+        current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
         report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
         
-        for website in $(echo "$websites" | jq -r '.url'); do
-          # 获取网站名称
-          website_name=$(echo "$websites" | jq -r --arg url "$website" '.[] | select(.url == $url) | .name')
+        # 循环处理每个网站对象
+        for website in $websites; do
+          # 从 JSON 对象中提取网站名称和 URL
+          website_name=$(echo "$website" | jq -r '.name')
+          website_url=$(echo "$website" | jq -r '.url')
           
           # 使用 -L 选项自动跟随重定向
-          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website)
+          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website_url)
           if [ $status_code -eq 200 ]; then
             status="✅ 正常"
           else
             status="❌ 异常"
           fi
-          result="🌐${website_name}： <a href='${website}'>${website}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
+          result="🌐${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
           echo -e "$result"
           report="${report}${result}"
         done
