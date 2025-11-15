@@ -16,7 +16,6 @@ env:
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}  # 从 GitHub Secrets 中获取
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
 
-
 jobs:
   check-websites:
     runs-on: ubuntu-latest
@@ -30,7 +29,8 @@ jobs:
         report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
         
         for website in $websites; do
-          status_code=$(curl -o /dev/null -s -w "%{http_code}" $website)
+          # 使用 -L 选项自动跟随重定向
+          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website)
           if [ $status_code -eq 200 ]; then
             status="✅ 正常"
           else
