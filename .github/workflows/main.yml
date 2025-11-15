@@ -40,59 +40,60 @@ jobs:
     steps:
       - name: ⚙️ 检查网站状态并生成报告
         id: check
-        # 核心逻辑：使用 while read 循环和子 Shell 确保 Shell 脚本的健壮性
+        # 核心逻辑：使用 while read 和 安全输出结构
         run: |
-          # 定义一个安全的、唯一的自定义分隔符，用于 GITHUB_OUTPUT
-          DELIMITER="REPORT_END_DELIMITER_$(date +%s)" # 使用时间戳进一步确保唯一性
+          # 1. 定义一个安全的、唯一的自定义分隔符
+          DELIMITER="REPORT_END_DELIMITER_$(date +%s)"
 
-          # 1. 计算当前时间
+          # 2. 计算当前时间
           current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
           current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
           
-          # 2. 初始化报告头
-          initial_report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
+          # 3. 初始化报告头
+          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
           
-          # 3. 使用安全分隔符开始写入 GITHUB_OUTPUT
-          echo "report<<$DELIMITER" >> $GITHUB_OUTPUT
+          # 4. 使用 while read 循环累加报告内容
+          printf '%s' "$WEBSITES" | jq -c 'sort_by(.name) | .[]' | while read -r website; do
+            
+            # 从 JSON 对象中提取网站名称和 URL
+            website_name=$(jq -r '.name' <<< "$website")
+            website_url=$(jq -r '.url' <<< "$website")
+            
+            # 使用 curl 检查状态码 (URL 必须带引号)
+            status_code=$(curl -L -o /dev/null -s -w "%{http_code}" "$website_url")
+            
+            # 检查状态码是否为 200 OK
+            if [ "$status_code" -eq 200 ]; then
+              status="✅ 正常"
+            else
+              status="❌ 异常"
+            fi
+            
+            # 格式化单个结果
+            result="${website_name}： <a href='${website_url}'>${website_url}</a>\n  状态: ${status} (状态码: ${status_code})\n\n"
+            
+            # 打印到 Actions Log (标准错误流 >&2)
+            printf '%s' "$result" >&2 
+            
+            # 累加到报告变量
+            report="${report}${result}"
+          done
           
-          # 使用子 Shell () 和管道逻辑，解决变量丢失和分词问题
-          (
-            report="$initial_report" # 在子 Shell 中初始化报告
+          # 5. 最后，使用结构化输出块，确保分隔符位于独立的行上，解决 GITHUB_OUTPUT 错误
+          {
+            # 起始分隔符
+            echo "report<<$DELIMITER"
             
-            # 使用 printf 无损传递 JSON，并使用 while read -r website 逐行处理 jq 的输出
-            printf '%s' "$WEBSITES" | jq -c 'sort_by(.name) | .[]' | while read -r website; do
-              
-              # 从 JSON 对象中提取网站名称和 URL (使用 <<< 传参更安全)
-              website_name=$(jq -r '.name' <<< "$website")
-              website_url=$(jq -r '.url' <<< "$website")
-              
-              # 使用 curl 检查状态码 (URL 必须带引号)
-              status_code=$(curl -L -o /dev/null -s -w "%{http_code}" "$website_url")
-              
-              # 检查状态码是否为 200 OK
-              if [ "$status_code" -eq 200 ]; then
-                status="✅ 正常"
-              else
-                status="❌ 异常"
-              fi
-              
-              # 格式化单个结果
-              result="${website_name}： <a href='${website_url}'>${website_url}</a>\n  状态: ${status} (状态码: ${status_code})\n\n"
-              
-              # 打印到 Actions Log (标准错误流 >&2)
-              printf '%s' "$result" >&2 
-              
-              # 累加到报告变量
-              report="${report}${result}"
-            done
-            
-            # 最终将完整的报告打印到标准输出，由重定向捕获
+            # 报告内容 (无额外换行)
             printf '%s' "$report"
             
-          ) >> $GITHUB_OUTPUT
-          
-          # 使用安全分隔符结束写入 GITHUB_OUTPUT
-          echo "$DELIMITER" >> $GITHUB_OUTPUT
+            # 必须输出一个干净的换行符，确保内容和结束分隔符分离
+            echo
+            
+            # 结束分隔符
+            echo "$DELIMITER"
+            
+          } >> $GITHUB_OUTPUT
 
       - name: 📢 发送报告到 Telegram
         # 这一步依赖上一步的输出
