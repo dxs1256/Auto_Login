@@ -14,7 +14,7 @@ env:
       {"name": "我的博客", "url": "https://situ.eu.org"},
       {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
       {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
-      {"name": "OpenList", "url": "http://op.situ.eu.org"}
+      {"name": "OpenList", "url": "http://dav.situ.eu.org"}
     ]
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }} # 从 GitHub Secrets 中获取
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
