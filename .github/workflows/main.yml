@@ -1,63 +1,79 @@
 name: 网站状态定时检查
 
 on:
-  workflow_dispatch:  # 保留手动触发选项
+  workflow_dispatch: # 保留手动触发选项
   schedule:
-    - cron: '0 */6 * * *'  # 每6小时运行一次
+    - cron: '0 */6 * * *' # 每6小时运行一次
 
 env:
-  WEBSITES: '[ 
-    {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
-    {"name": "我的博客", "url": "https://situ.eu.org"},
-    {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
-    {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
-    {"name": "OpenList", "url": "http://op.situ.eu.org"}
-  ]'
-  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}  # 从 GitHub Secrets 中获取
+  # 使用 | (字面量块标量) 定义多行 JSON 字符串。
+  # 这样可以安全地在 YAML 中嵌入多行内容，避免解析错误。
+  WEBSITES: |
+    [
+      {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
+      {"name": "我的博客", "url": "https://situ.eu.org"},
+      {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
+      {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
+      {"name": "OpenList", "url": "http://op.situ.eu.org"}
+    ]
+  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }} # 从 GitHub Secrets 中获取
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
 
 jobs:
   check-websites:
     runs-on: ubuntu-latest
+    
+    # 确保安装 jq 以处理 JSON 数组
     steps:
-    - name: 检查网站状态
-      id: check
-      run: |
-        # 排序网站数组，按名称字母顺序
-        websites=$(echo $WEBSITES | jq -c 'sort_by(.name) | .[]')
-        current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
-        current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
-        report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
-        
-        # 循环处理每个网站对象
-        for website in $websites; do
-          # 从 JSON 对象中提取网站名称和 URL
-          website_name=$(echo "$website" | jq -r '.name')
-          website_url=$(echo "$website" | jq -r '.url')
+      - name: 安装 jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: 检查网站状态
+        id: check
+        run: |
+          # 确保用双引号 "$WEBSITES" 引用变量，以便正确传递多行内容
+          websites=$(echo "$WEBSITES" | jq -c 'sort_by(.name) | .[]')
+          current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
           
-          # 使用 -L 选项自动跟随重定向
-          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website_url)
-          if [ $status_code -eq 200 ]; then
-            status="✅ 正常"
-          else
-            status="❌ 异常"
-          fi
-          result="${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
-          echo -e "$result"
-          report="${report}${result}"
-        done
-        
-        echo "report<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$report" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+          # 计算 UTC +8 小时为中国时间
+          current_china_time=$(date -d "$current_utc_time UTC +8 hours" "+%Y-%m-%d %H:%M:%S")
+          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
+          
+          # 循环处理每个网站对象
+          for website in $websites; do
+            website_name=$(echo "$website" | jq -r '.name')
+            website_url=$(echo "$website" | jq -r '.url')
+            
+            # 使用 -L 选项自动跟随重定向
+            # 使用 -m 1 限制最大重定向次数为 1，防止死循环
+            status_code=$(curl -L -m 1 -o /dev/null -s -w "%{http_code}" "$website_url")
+            
+            # 优化：2xx (成功) 和 3xx (重定向) 都视为正常
+            if [ "$status_code" -ge 200 ] && [ "$status_code" -lt 400 ]; then
+              status="✅ 正常"
+            else
+              status="❌ 异常"
+            fi
+            
+            result="${website_name}： <a href='${website_url}'>${website_url}</a>\n    状态: ${status} (状态码: ${status_code})\n\n"
+            echo -e "$result"
+            report="${report}${result}"
+          done
+          
+          # 将报告内容输出到 GITHUB_OUTPUT
+          # 使用 EOF 标记安全地传递多行内容
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$report" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-    - name: 发送报告到 Telegram
-      run: |
-        report="${{ steps.check.outputs.report }}"
-        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-          -H "Content-Type: application/json" \
-          -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
+      - name: 发送报告到 Telegram
+        run: |
+          report="${{ steps.check.outputs.report }}"
+          # 确保 report 变量用双引号包裹在 JSON 字符串中，防止内容中的特殊字符破坏 JSON 结构
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
 
-    - name: 显示报告
-      run: |
-        echo -e "${{ steps.check.outputs.report }}"
+      - name: 显示报告
+        run: |
+          echo -e "${{ steps.check.outputs.report }}"
