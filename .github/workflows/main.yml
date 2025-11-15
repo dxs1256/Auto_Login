@@ -43,7 +43,7 @@ jobs:
           else
             status="❌ 异常"
           fi
-          result="🌐${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
+          result="${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
           echo -e "$result"
           report="${report}${result}"
         done
