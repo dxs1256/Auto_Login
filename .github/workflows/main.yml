@@ -12,6 +12,7 @@ env:
       {"name": "我的博客", "url": "https://situ.eu.org"},
       {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
       {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
+      {"name": "E5 订阅", "url": "http://74.48.144.51:1066/Admin/Login?ReturnUrl=%2F"},
       {"name": "OpenList", "url": "http://op.situ.eu.org"}
     ]
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
