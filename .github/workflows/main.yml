@@ -1,109 +1,64 @@
-name: 网站状态定时检查 🚀
+name: 网站状态定时检查
 
-# --------------------------
-# 触发器 (Triggers)
-# --------------------------
 on:
-  # 允许手动在 GitHub 页面上触发工作流
-  workflow_dispatch:
-
-  # 定时任务触发器
+  workflow_dispatch:  # 保留手动触发选项
   schedule:
-    # cron 表达式： '0 */6 * * *' 表示每 6 小时运行一次
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *'  # 每6小时运行一次
 
-# --------------------------
-# 环境变量 (Environment Variables)
-# --------------------------
 env:
-  # WEBSITES 变量：定义需要检查的网站列表 (JSON 格式)
-  WEBSITES: |
-    [
-      {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
-      {"name": "我的博客", "url": "https://situ.eu.org"},
-      {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
-      {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
-      {"name": "E5 订阅", "url": "http://74.48.144.51:1066/Admin/Login?ReturnUrl=%2F"},
-      {"name": "OpenList", "url": "http://op.situ.eu.org"}
-    ]
-  # Telegram Bot Token 和 Chat ID 从 Secrets 获取
-  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-  TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+  WEBSITES: '[ 
+    {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
+    {"name": "PornTV", "url": "https://fluffy-hedy-situ-e8e2da56.koyeb.app"},
+    {"name": "我的博客", "url": "https://situ.eu.org"},
+    {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
+    {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
+    {"name": "OpenList", "url": "http://op.situ.eu.org"}
+  ]'
+  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}  # 从 GitHub Secrets 中获取
+  TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
 
-# --------------------------
-# 工作 (Jobs)
-# --------------------------
 jobs:
   check-websites:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: ⚙️ 检查网站状态并生成报告
-        id: check
-        # 核心逻辑：使用 while read 和 安全输出结构
-        run: |
-          # 1. 定义一个安全的、唯一的自定义分隔符
-          DELIMITER="REPORT_END_DELIMITER_$(date +%s)"
-
-          # 2. 计算当前时间
-          current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
-          current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
+    - name: 检查网站状态
+      id: check
+      run: |
+        # 排序网站数组，按名称字母顺序
+        websites=$(echo $WEBSITES | jq -c 'sort_by(.name) | .[]')
+        current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
+        current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
+        report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
+        
+        # 循环处理每个网站对象
+        for website in $websites; do
+          # 从 JSON 对象中提取网站名称和 URL
+          website_name=$(echo "$website" | jq -r '.name')
+          website_url=$(echo "$website" | jq -r '.url')
           
-          # 3. 初始化报告头
-          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
-          
-          # 4. 使用 while read 循环累加报告内容
-          printf '%s' "$WEBSITES" | jq -c 'sort_by(.name) | .[]' | while read -r website; do
-            
-            # 从 JSON 对象中提取网站名称和 URL
-            website_name=$(jq -r '.name' <<< "$website")
-            website_url=$(jq -r '.url' <<< "$website")
-            
-            # 使用 curl 检查状态码 (URL 必须带引号)
-            status_code=$(curl -L -o /dev/null -s -w "%{http_code}" "$website_url")
-            
-            # 检查状态码是否为 200 OK
-            if [ "$status_code" -eq 200 ]; then
-              status="✅ 正常"
-            else
-              status="❌ 异常"
-            fi
-            
-            # 格式化单个结果
-            result="${website_name}： <a href='${website_url}'>${website_url}</a>\n  状态: ${status} (状态码: ${status_code})\n\n"
-            
-            # 打印到 Actions Log (标准错误流 >&2)
-            printf '%s' "$result" >&2 
-            
-            # 累加到报告变量
-            report="${report}${result}"
-          done
-          
-          # 5. 最后，使用结构化输出块，确保分隔符位于独立的行上，解决 GITHUB_OUTPUT 错误
-          {
-            # 起始分隔符
-            echo "report<<$DELIMITER"
-            
-            # 报告内容 (无额外换行)
-            printf '%s' "$report"
-            
-            # 必须输出一个干净的换行符，确保内容和结束分隔符分离
-            echo
-            
-            # 结束分隔符
-            echo "$DELIMITER"
-            
-          } >> $GITHUB_OUTPUT
+          # 使用 -L 选项自动跟随重定向
+          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website_url)
+          if [ $status_code -eq 200 ]; then
+            status="✅ 正常"
+          else
+            status="❌ 异常"
+          fi
+          result="${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
+          echo -e "$result"
+          report="${report}${result}"
+        done
+        
+        echo "report<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$report" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: 📢 发送报告到 Telegram
-        # 保持了您原始的逻辑
-        run: |
-          report="${{ steps.check.outputs.report }}"
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
+    - name: 发送报告到 Telegram
+      run: |
+        report="${{ steps.check.outputs.report }}"
+        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+          -H "Content-Type: application/json" \
+          -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
 
-      - name: 💻 显示报告 (用于 Actions 日志查看)
-        # 保持了您原始的逻辑
-        run: |
-          echo -e "${{ steps.check.outputs.report }}"
+    - name: 显示报告
+      run: |
+        echo -e "${{ steps.check.outputs.report }}"
