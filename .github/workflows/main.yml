@@ -6,40 +6,51 @@ on:
     - cron: '0 */6 * * *'  # 每6小时运行一次
 
 env:
-  WEBSITES: '[{"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},{"name": "我的博客", "url": "https://situ.eu.org"},{"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},{"name": "OpenWrt", "url": "http://op.situ.eu.org"},{"name": "E5 订阅", "url": "http://74.48.144.51:1066/Admin/Login?ReturnUrl=%2F"},{"name": "OpenList", "url": "http://op.situ.eu.org"}]'
+  WEBSITES: |
+    [
+      {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
+      {"name": "我的博客", "url": "https://situ.eu.org"},
+      {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
+      {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
+      {"name": "E5 订阅", "url": "http://74.48.144.51:1066/Admin/Login?ReturnUrl=%2F"},
+      {"name": "OpenList", "url": "http://op.situ.eu.org"}
+    ]
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
 
 jobs:
   check-websites:
     runs-on: ubuntu-latest
+
     steps:
     - name: 检查网站状态
       id: check
       run: |
-        # 将 WEBSITES 转换为 JSON 数组格式
-        websites="${{ env.WEBSITES }}"
-        
         # 排序网站数组，按名称字母顺序
-        websites_sorted=$(echo $websites | jq -c 'sort_by(.name) | .[]')
+        websites=$(echo $WEBSITES | jq -c 'sort_by(.name) | .[]')
         
         current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
         current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
+        
         report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
         
         # 循环处理每个网站对象
-        for website in $(echo "$websites_sorted" | jq -r '.name'); do
+        for website in $websites; do
+          # 从 JSON 对象中提取网站名称和 URL
           website_name=$(echo "$website" | jq -r '.name')
           website_url=$(echo "$website" | jq -r '.url')
           
           # 使用 -L 选项自动跟随重定向
           status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website_url)
+          
           if [ $status_code -eq 200 ]; then
             status="✅ 正常"
           else
             status="❌ 异常"
           fi
+          
           result="${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
+          
           echo -e "$result"
           report="${report}${result}"
         done
