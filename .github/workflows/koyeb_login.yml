@@ -2,7 +2,7 @@ name: Koyeb Auto Login
 
 on:
   schedule:
-    - cron: '0 11 * * 0'  # 每周日 UTC 时间 11:00 执行
+    - cron: '0 20 * * 6'  # 每周六 UTC 20:00 = 北京时间周日 04:00
   workflow_dispatch:
 jobs:
   login:
