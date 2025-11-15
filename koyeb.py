@@ -85,7 +85,7 @@ def main():
 
             time.sleep(5)
 
-        summary = f"🗓️ 北京时间: {current_time}\n\n" + "\n\n".join(messages) + "\n\n✅ 任务执行完成"
+        summary = f"🗓️ 北京时间: {current_time}\n\n" + "\n\n".join(messages) + "\n\n✅ Koyeb 登录成功"
 
         logging.info("📋 任务完成，发送 Telegram 通知")
         send_tg_message(summary)
