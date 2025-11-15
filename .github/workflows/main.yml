@@ -96,19 +96,14 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: 📢 发送报告到 Telegram
-        # 这一步依赖上一步的输出
+        # 保持了您原始的逻辑
         run: |
-          # 从上一步获取报告内容
           report="${{ steps.check.outputs.report }}"
-
-          # 使用 curl 调用 Telegram Bot API 发送消息
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
 
       - name: 💻 显示报告 (用于 Actions 日志查看)
+        # 保持了您原始的逻辑
         run: |
-          echo "--- Telegram Report Content ---"
-          # 使用 echo -e 确保换行符和 HTML 格式正确显示
           echo -e "${{ steps.check.outputs.report }}"
-          echo "-------------------------------"
