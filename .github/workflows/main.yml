@@ -7,11 +7,11 @@ on:
 
 env:
   WEBSITES: '[
-    "https://dxs1256.zeabur.app",
-    "https://fluffy-hedy-situ-e8e2da56.koyeb.app",
-    "https://situ.eu.org",
-    "https://vzlvvpql.ap-northeast-1.clawcloudrun.com",
-    "http://op.situ.eu.org"
+    {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
+    {"name": "PornTV", "url": "https://fluffy-hedy-situ-e8e2da56.koyeb.app"},
+    {"name": "我的博客", "url": "https://situ.eu.org"},
+    {"name": "Alist", "url": "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"},
+    {"name": "OpenWrt", "url": "http://op.situ.eu.org"}
   ]'
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}  # 从 GitHub Secrets 中获取
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
@@ -28,7 +28,10 @@ jobs:
         current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d   %H:%M:%S")
         report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
         
-        for website in $websites; do
+        for website in $(echo "$websites" | jq -r '.url'); do
+          # 获取网站名称
+          website_name=$(echo "$websites" | jq -r --arg url "$website" '.[] | select(.url == $url) | .name')
+          
           # 使用 -L 选项自动跟随重定向
           status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website)
           if [ $status_code -eq 200 ]; then
@@ -36,7 +39,7 @@ jobs:
           else
             status="❌ 异常"
           fi
-          result="🌐 <a href='${website}'>${website}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
+          result="🌐${website_name}： <a href='${website}'>${website}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
           echo -e "$result"
           report="${report}${result}"
         done
