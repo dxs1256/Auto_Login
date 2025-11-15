@@ -10,9 +10,9 @@ env:
       [
         "https://dxs1256.zeabur.app",
         "https://fluffy-hedy-situ-e8e2da56.koyeb.app",
-        "https://situ.eu.org"
-        "https://vzlvvpql.ap-northeast-1.clawcloudrun.com"
-        "http://op.situ.eu.org"
+        "https://situ.eu.org",
+        "https://vzlvvpql.ap-northeast-1.clawcloudrun.com",
+        "http://op.situ.eu.org",
       ]
     TG_BOT_TOKEN: 'XXX' #替换为您j机器人实际 bot token
     TG_CHAT_ID: 'XXX' #替换为您的实际 chat ID
