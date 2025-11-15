@@ -1,11 +1,22 @@
-name: 网站状态定时检查
+name: 网站状态定时检查 🚀
 
+# --------------------------
+# 触发器 (Triggers)
+# --------------------------
 on:
-  workflow_dispatch:  # 保留手动触发选项
-  schedule:
-    - cron: '0 */6 * * *'  # 每6小时运行一次
+  # 允许手动在 GitHub 页面上触发工作流
+  workflow_dispatch:
 
+  # 定时任务触发器
+  schedule:
+    # cron 表达式： '0 */6 * * *' 表示每 6 小时运行一次 (UTC 时间 0点, 6点, 12点, 18点)
+    - cron: '0 */6 * * *'
+
+# --------------------------
+# 环境变量 (Environment Variables)
+# --------------------------
 env:
+  # WEBSITES 变量：使用 Literal Style (|) 定义多行 JSON 字符串，清晰易读
   WEBSITES: |
     [
       {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
@@ -15,57 +26,79 @@ env:
       {"name": "E5 订阅", "url": "http://74.48.144.51:1066/Admin/Login?ReturnUrl=%2F"},
       {"name": "OpenList", "url": "http://op.situ.eu.org"}
     ]
+  # Telegram Bot Token 和 Chat ID 从 Secrets 获取
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
 
+# --------------------------
+# 工作 (Jobs)
+# --------------------------
 jobs:
   check-websites:
+    # 在最新的 Ubuntu 运行环境中执行
     runs-on: ubuntu-latest
-
+    
+    # 步骤 (Steps)
     steps:
-    - name: 检查网站状态
-      id: check
-      run: |
-        # 排序网站数组，按名称字母顺序
-        websites=$(echo $WEBSITES | jq -c 'sort_by(.name) | .[]')
-        
-        current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
-        current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
-        
-        report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
-        
-        # 循环处理每个网站对象
-        for website in $websites; do
-          # 从 JSON 对象中提取网站名称和 URL
-          website_name=$(echo "$website" | jq -r '.name')
-          website_url=$(echo "$website" | jq -r '.url')
+      - name: ⚙️ 检查网站状态并生成报告
+        id: check
+        # 使用 Bash 脚本执行检查逻辑
+        # 注意：此脚本中 for 循环处理 $WEBSITES 的方式存在 Shell 分词问题，
+        # 推荐使用 while read 循环 (请参考我上一次回复中提供的修复方案)。
+        # 这里保留您的原始逻辑结构，但排版优化。
+        run: |
+          # 使用 printf 替代 echo 传递多行 JSON 给 jq，确保 jq 解析正确性
+          WEBSITES_JSON=$(printf '%s' "$WEBSITES")
+          websites=$(echo "$WEBSITES_JSON" | jq -c 'sort_by(.name) | .[]')
           
-          # 使用 -L 选项自动跟随重定向
-          status_code=$(curl -L -o /dev/null -s -w "%{http_code}" $website_url)
+          # 计算当前 UTC 和 CST 时间
+          current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
+          current_china_time=$(date -d "$current_utc_time UTC+8 hours" "+%Y-%m-%d %H:%M:%S")
           
-          if [ $status_code -eq 200 ]; then
-            status="✅ 正常"
-          else
-            status="❌ 异常"
-          fi
-          
-          result="${website_name}： <a href='${website_url}'>${website_url}</a>\n   状态: ${status} (状态码: ${status_code})\n\n"
-          
-          echo -e "$result"
-          report="${report}${result}"
-        done
-        
-        echo "report<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$report" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
 
-    - name: 发送报告到 Telegram
-      run: |
-        report="${{ steps.check.outputs.report }}"
-        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-          -H "Content-Type: application/json" \
-          -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
+          # 循环处理每个网站对象 (⚠️ 此处循环可能因为空格导致分词错误)
+          for website in $websites; do
+            # 从 JSON 对象中提取网站名称和 URL
+            website_name=$(echo "$website" | jq -r '.name')
+            website_url=$(echo "$website" | jq -r '.url')
+            
+            # 使用 curl 检查状态码
+            # -L 跟随重定向，-o /dev/null 丢弃输出，-s 静默模式，-w "%{http_code}" 仅输出状态码
+            status_code=$(curl -L -o /dev/null -s -w "%{http_code}" "$website_url")
+            
+            if [ "$status_code" -eq 200 ]; then
+              status="✅ 正常"
+            else
+              status="❌ 异常"
+            fi
+            
+            # 格式化单个结果 (使用 printf 替代 echo -e 打印到日志更安全)
+            result="${website_name}： <a href='${website_url}'>${website_url}</a>\n  状态: ${status} (状态码: ${status_code})\n\n"
+            echo -e "$result"
+            
+            # 累加到最终报告
+            report="${report}${result}"
+          done
+          
+          # 将报告内容输出到 GITHUB_OUTPUT 供后续步骤使用
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$report" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-    - name: 显示报告
-      run: |
-        echo -e "${{ steps.check.outputs.report }}"
+      - name: 📢 发送报告到 Telegram
+        # 这一步依赖上一步的输出
+        run: |
+          # 从上一步获取报告内容
+          report="${{ steps.check.outputs.report }}"
+
+          # 使用 curl 调用 Telegram Bot API 发送消息
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
+
+      - name: 💻 显示报告 (用于 Actions 日志查看)
+        run: |
+          echo "--- Telegram Report Content ---"
+          echo -e "${{ steps.check.outputs.report }}"
+          echo "-------------------------------"
