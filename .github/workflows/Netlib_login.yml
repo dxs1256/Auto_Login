@@ -27,5 +27,5 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }} # 从 GitHub Secrets 中获取
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
-          ACCOUNTS: ${{ secrets.NETLIB_ACCOUNTS }}  # 从 GitHub Secrets 中获取
+          NETLIB_ACCOUNTS: ${{ secrets.NETLIB_ACCOUNTS }}  # 从 GitHub Secrets 中获取
         run: npm start
