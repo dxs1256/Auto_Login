@@ -12,7 +12,7 @@
 | :---: | :---: | :---: | :---: | :---: | :---: |
 | **福利吧** | `fuliba.py` | 自动签到, 检查 Cookie 有效性 | `0 18,22 * * *` (每日 02:00, 06:00 HKT) | ✅ 稳定运行 | `FUBA`, `FUBAUN` |
 | **Netlib** | `login.js` | Playwright 登录保活 | `25 9 */30 * *` (每30天运行) | ✅ 稳定运行 | `NETLIB_ACCOUNTS` |
-| **Koyeb** | `koyeb.py` | Playwright 登录保活 | `25 9 */30 * *` (每30天运行) | ⏳ 待定/运行中 | `KOYEB_ACCOUNTS` |
+| **Koyeb** | `koyeb.py` | Playwright 登录保活 | `25 9 */30 * *` (每30天运行) | ✅ 稳定运行 | `KOYEB_ACCOUNTS` |
 
 ---
 
