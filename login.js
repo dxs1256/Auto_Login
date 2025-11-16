@@ -1,12 +1,13 @@
 const axios = require('axios');
 const { chromium } = require('playwright');
 
-const token = process.env.BOT_TOKEN;
-const chatId = process.env.CHAT_ID;
-const accounts = process.env.ACCOUNTS;
+// 从新的环境变量名称获取值
+const token = process.env.TG_BOT_TOKEN; // 修改为 TG_BOT_TOKEN
+const chatId = process.env.TG_CHAT_ID;   // 修改为 TG_CHAT_ID
+const accounts = process.env.NETLIB_ACCOUNTS; // 修改为 NETLIB_ACCOUNTS
 
 if (!accounts) {
-  console.log('❌ 未配置账号');
+  console.log('❌ 未配置账号 (环境变量 NETLIB_ACCOUNTS 缺失)'); // 提示信息也相应修改
   process.exit(1);
 }
 
@@ -22,7 +23,10 @@ if (accountList.length === 0) {
 }
 
 async function sendTelegram(message) {
-  if (!token || !chatId) return;
+  if (!token || !chatId) {
+    console.log('⚠️ Telegram Token 或 Chat ID 未配置，跳过发送通知。'); // 增加未配置时的提示
+    return;
+  }
 
   const now = new Date();
   const hkTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
@@ -37,7 +41,7 @@ async function sendTelegram(message) {
     }, { timeout: 10000 });
     console.log('✅ Telegram 通知发送成功');
   } catch (e) {
-    console.log('⚠️ Telegram 发送失败');
+    console.log('⚠️ Telegram 发送失败', e.message); // 打印错误信息
   }
 }
 
@@ -54,41 +58,57 @@ async function loginWithAccount(user, pass) {
   
   try {
     page = await browser.newPage();
-    page.setDefaultTimeout(30000);
+    page.setDefaultTimeout(30000); // 增加默认超时时间，避免一些网络波动导致的问题
     
     console.log(`📱 ${user} - 正在访问网站...`);
     await page.goto('https://www.netlib.re/', { waitUntil: 'networkidle' });
     await page.waitForTimeout(3000);
     
     console.log(`🔑 ${user} - 点击登录按钮...`);
-    await page.click('text=Login', { timeout: 5000 });
-    
+    // 更健壮的选择器，以防文本改变
+    const loginButton = await page.$('text=/Login/i, [role="button"], a:has-text("Login")'); 
+    if (loginButton) {
+      await loginButton.click({ timeout: 5000 });
+    } else {
+      console.log(`⚠️ ${user} - 未找到明确的登录按钮，尝试直接填写表单。`);
+    }
+
     await page.waitForTimeout(2000);
     
     console.log(`📝 ${user} - 填写用户名...`);
-    await page.fill('input[name="username"], input[type="text"]', user);
+    // 更通用的用户名输入框选择器
+    await page.fill('input[name="username"], input[id*="user"], input[type="text"]', user);
     await page.waitForTimeout(1000);
     
     console.log(`🔒 ${user} - 填写密码...`);
-    await page.fill('input[name="password"], input[type="password"]', pass);
+    // 更通用的密码输入框选择器
+    await page.fill('input[name="password"], input[id*="pass"], input[type="password"]', pass);
     await page.waitForTimeout(1000);
     
     console.log(`📤 ${user} - 提交登录...`);
-    await page.click('button:has-text("Validate"), input[type="submit"]');
+    // 更通用的提交按钮选择器
+    await page.click('button:has-text(/Validate|Login|Sign In/i), input[type="submit"], [type="submit"]');
     
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(5000);
+    await page.waitForLoadState('networkidle'); // 等待网络空闲
+    await page.waitForTimeout(5000); // 额外等待，确保页面完全加载和跳转
     
     // 检查登录是否成功
     const pageContent = await page.content();
     
-    if (pageContent.includes('exclusive owner') || pageContent.includes(user)) {
+    // 检查登录成功或失败的关键词，可以根据实际网站的登录反馈做更精确的判断
+    // 例如，检查是否有个人中心链接，或者是否有错误提示
+    if (pageContent.includes('exclusive owner') || pageContent.includes(user) || pageContent.includes('My Account')) {
       console.log(`✅ ${user} - 登录成功`);
       result.success = true;
       result.message = `✅ ${user} 登录成功`;
-    } else {
-      console.log(`❌ ${user} - 登录失败`);
-      result.message = `❌ ${user} 登录失败`;
+    } else if (pageContent.includes('Invalid username or password') || pageContent.includes('Incorrect login')) {
+      console.log(`❌ ${user} - 登录失败: 用户名或密码错误`);
+      result.message = `❌ ${user} 登录失败: 用户名或密码错误`;
+    } 
+    else {
+      // 捕获其他未知的登录失败情况
+      console.log(`❌ ${user} - 登录失败 (未知原因，请检查页面内容)`);
+      result.message = `❌ ${user} 登录失败 (未知原因)`;
     }
     
   } catch (e) {
