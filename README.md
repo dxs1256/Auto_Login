@@ -2,7 +2,7 @@
 
 **🚀 驱动：GitHub Actions | 🤖 核心：Python/Node.js | 🔔 通知：Telegram**
 
-本仓库用于自动化执行各类网站和服务的日常签到和保活任务。所有账号和通知信息均通过 GitHub Secrets 安全管理。
+本仓库自动化执行各类网站和服务的日常签到和保活任务。所有账号和通知信息均通过 GitHub Secrets 安全管理。
 
 ---
 
