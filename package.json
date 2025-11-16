@@ -1,0 +1,12 @@
+{
+  "name": "keepalive-netlib",
+  "version": "1.0.0",
+  "main": "login.js",
+  "scripts": {
+    "start": "node login.js"
+  },
+  "dependencies": {
+    "axios": "latest",
+    "playwright": "latest"
+  }
+}
