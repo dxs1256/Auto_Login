@@ -162,12 +162,19 @@ def start(cookie, username):
         sign_result_text = response.text
         print(f"📥 签到请求响应: {sign_result_text.strip()}")
         
+# 更智能的签到结果判断
+        # 1. 明确的成功/重复签到提示
         if "恭喜您" in sign_result_text or "获得" in sign_result_text:
             sign_status_message = "✅ 签到成功！"
-        elif "今日已签" in sign_result_text or "已经签到" in sign_result_text: # 增加已签到的判断
-             sign_status_message = "✅ 今日已签到。"
+        elif "今日已签" in sign_result_text or "已经签到" in sign_result_text: 
+             sign_status_message = "✅ 今日已签到（重复签到）。"
+        # 2. 针对福利吧空XML响应的特殊处理
+        elif '<root><![CDATA[]]></root>' in sign_result_text.strip():
+             sign_status_message = "✅ 签到操作已执行（空响应）。"
+        # 3. 明确的失败提示
         elif "Access Denied" in sign_result_text:
              sign_status_message = "❌ 签到失败: Access Denied，可能需要更新Cookie或IP问题。"
+        # 4. 其他未知响应
         else:
             sign_status_message = "❓ 签到响应不明确，请人工检查结果。"
         print(sign_status_message)
