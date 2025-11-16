@@ -1,4 +1,4 @@
-name: Koyeb Auto Login
+name: Koyeb自动登录
 
 on:
   schedule:
