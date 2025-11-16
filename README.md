@@ -11,8 +11,8 @@
 | 网站/服务 | 脚本文件 | 核心功能 | 运行频率 (UTC) | 状态 | 环境变量 (Secrets) |
 | :---: | :---: | :---: | :---: | :---: | :---: |
 | **福利吧** | `fuliba.py` | 自动签到, 检查 Cookie 有效性 | `0 18,22 * * *` (每日 02:00, 06:00 HKT) | ✅ 稳定运行 | `FUBA`, `FUBAUN` |
-| **Netlib** | `login.js` | Playwright 登录保活 | `25 9 */30 * *` (每30天运行) | ✅ 稳定运行 | `NETLIB_ACCOUNTS` |
-| **Koyeb** | `koyeb.py` | Playwright 登录保活 | `25 9 */30 * *` (每30天运行) | ✅ 稳定运行 | `KOYEB_ACCOUNTS` |
+| **Netlib** | `login.js` | Playwright 登录保活 | `0 20 * * 6` (每周六 20:00 执行) | ✅ 稳定运行 | `NETLIB_ACCOUNTS` |
+| **Koyeb** | `koyeb.py` | Playwright 登录保活 | `0 20 * * 6` (每周六 20:00 执行) | ✅ 稳定运行 | `KOYEB_ACCOUNTS` |
 
 ---
 
