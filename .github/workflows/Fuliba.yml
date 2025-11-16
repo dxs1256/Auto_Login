@@ -1,4 +1,4 @@
-name: 福利吧自动签到通知
+name: 福利吧自动签到
 
 on:
   schedule:
