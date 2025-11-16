@@ -49,7 +49,7 @@
 
 | 文件名 | 触发方式 |
 | :---: | :---: |
-| `Fuliba_login.yml` | 定时 (`0 18,22 * * *`) 和 手动触发 (`workflow_dispatch`) |
+| `Fuliba_login.yml` | 定时 (`0 18,22 * * *`) 和 手动触发 |
 | `Netlib_login.yml` | 定时 (`25 9 */30 * *`) 和 手动触发 |
 | `Koyeb_login.yml` | 定时 (`25 9 */30 * *`) 和 手动触发 |
 
