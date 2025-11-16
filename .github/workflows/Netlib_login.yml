@@ -2,7 +2,7 @@ name: Netlib自动登录
 
 on:
   schedule:
-    - cron: '25 9 */30 * *'  # 每30天运行一次（时间早上8点）
+    - cron: '0 20 * * 6'  # 每30天运行一次（时间早上8点）
   workflow_dispatch:  # 允许手动运行
 
 jobs:
