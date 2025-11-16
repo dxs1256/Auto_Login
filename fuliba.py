@@ -1,11 +1,5 @@
 # -*- coding: utf8 -*-
 
-"""
-# 下方cron签到时间意思是：每天2点和6点签到一次，以防签到失败
-cron: 0 0 2,6 * * *
-new Env('福利吧签到');
-"""
-
 import requests
 import re
 import os
