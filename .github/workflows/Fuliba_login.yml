@@ -12,30 +12,22 @@ on:
   workflow_dispatch: # 允许手动触发工作流
 
 jobs:
-  run_fuba_checkin:
-    runs-on: ubuntu-latest # 使用最新的 Ubuntu 运行环境
-
+  checkin:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository # 步骤1: 检出代码
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up Python # 步骤2: 设置 Python 环境
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.9' # 指定 Python 版本，建议使用较新的稳定版本
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-      - name: Install dependencies # 步骤3: 安装 Python 依赖
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests beautifulsoup4
+    - name: Install dependencies
+      run: pip install requests
 
-      - name: Run 福利吧签到脚本 # 步骤4: 运行你的 Python 脚本
-        env:
-          # 从 GitHub Secrets 中获取 Telegram 配置
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          # 从 GitHub Secrets 中获取福利吧账号信息
-          FUBA: ${{ secrets.FUBA }}
-          FUBAUN: ${{ secrets.FUBAUN }}
-          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}   # ← 关键！
-        run: python fuliba.py # 运行你的脚本文件
+    - name: Run Check-in Script
+      # 使用 env: 块将 Secrets 注入到脚本的环境变量中
+      env:
+        FUBA: ${{ secrets.FUBA }}
+        FUBAUN: ${{ secrets.FUBAUN }}
+      run: python fuliba.py
