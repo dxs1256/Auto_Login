@@ -195,3 +195,4 @@ if __name__ == '__main__':
         send_telegram_notification("福利吧签到失败", error_message)
 
         sys.exit(1)
+
