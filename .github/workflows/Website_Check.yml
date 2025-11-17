@@ -1,27 +1,13 @@
 name: 网站状态定时检查
 
-# ----------------------------------------------------
-# 触发条件配置 (Trigger Configuration)
-# ----------------------------------------------------
 on:
-  # 允许手动在 GitHub 页面上触发工作流
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: '手动触发的原因'
-        required: false
-        default: '例行检查'
-
-  # 设置定时任务 (Cron Job)
+  workflow_dispatch: # 保留手动触发选项
   schedule:
-    # '0 */6 * * *' 表示每天每隔 6 小时在整点执行 (例如 00:00, 06:00, 12:00, 18:00 UTC)
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *' # 每6小时运行一次
 
-# ----------------------------------------------------
-# 环境变量配置 (Environment Variables)
-# ----------------------------------------------------
 env:
-  # 使用 | 块标量安全地定义多行 JSON 数组。
+  # 使用 | (字面量块标量) 定义多行 JSON 字符串。
+  # 这样可以安全地在 YAML 中嵌入多行内容，避免解析错误。
   WEBSITES: |
     [
       {"name": "MoonTV", "url": "https://dxs1256.zeabur.app"},
@@ -30,105 +16,64 @@ env:
       {"name": "OpenWrt", "url": "http://op.situ.eu.org"},
       {"name": "OpenList", "url": "http://dav.situ.eu.org"}
     ]
-  # Telegram Bot 密钥和 Chat ID 从 GitHub Secrets 获取
-  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-  TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }} # 从 GitHub Secrets 中获取
+  TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
 
-# ----------------------------------------------------
-# 任务定义 (Jobs Definition)
-# ----------------------------------------------------
 jobs:
   check-websites:
-    # 运行环境
     runs-on: ubuntu-latest
     
+    # 确保安装 jq 以处理 JSON 数组
     steps:
-      # 步骤 1: 安装依赖工具 (jq)
-      # jq 是用于处理 JSON 数据的轻量级命令行工具
-      - name: 1. 安装 jq 工具
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+      - name: 安装 jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 步骤 2: 检查网站状态并生成报告
-      - name: 2. 执行网站状态检查
+      - name: 检查网站状态
         id: check
-        # 添加 set -euo pipefail 确保脚本在遇到错误时立即退出，提高健壮性
         run: |
-          set -euo pipefail
-          
-          echo "开始检查 ${#WEBSITES} 个网站..."
-          
-          # 1. 解析网站列表并排序，-c 紧凑输出，.[] 遍历数组元素
-          # 引用 $WEBSITES 时必须使用双引号，以保留多行内容
+          # 确保用双引号 "$WEBSITES" 引用变量，以便正确传递多行内容
           websites=$(echo "$WEBSITES" | jq -c 'sort_by(.name) | .[]')
-          
-          # 2. 计算并格式化当前时间 (UTC+8/北京时间)
           current_utc_time=$(date "+%Y-%m-%d %H:%M:%S")
+          
+          # 计算 UTC +8 小时为中国时间
           current_china_time=$(date -d "$current_utc_time UTC +8 hours" "+%Y-%m-%d %H:%M:%S")
+          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间:</b> ${current_china_time}\n\n"
           
-          # 3. 初始化 HTML 格式的报告头
-          report="<b>📊 网站状态报告</b>\n\n<b>📅 检查时间 (UTC+8):</b> ${current_china_time}\n\n"
-          
-          # 4. 循环检查每个网站
+          # 循环处理每个网站对象
           for website in $websites; do
             website_name=$(echo "$website" | jq -r '.name')
             website_url=$(echo "$website" | jq -r '.url')
             
-            echo "-> 正在检查: ${website_name} (${website_url})"
+            # 使用 -L 选项自动跟随重定向
+            # 使用 -m 1 限制最大重定向次数为 1，防止死循环
+            status_code=$(curl -L -m 1 -o /dev/null -s -w "%{http_code}" "$website_url")
             
-            # 使用 curl 检查状态码:
-            # -L: 跟随重定向
-            # -m 1: 最大超时时间 1 秒，快速失败
-            # -o /dev/null: 丢弃输出内容
-            # -s: 静默模式，不显示进度或错误
-            # -w "%{http_code}": 只输出 HTTP 状态码
-            status_code=$(curl -L -m 1 -o /dev/null -s -w "%{http_code}" "$website_url" || echo "000")
-            
-            # 优化: 2xx (成功) 和 3xx (重定向) 都视为正常/健康
+            # 优化：2xx (成功) 和 3xx (重定向) 都视为正常
             if [ "$status_code" -ge 200 ] && [ "$status_code" -lt 400 ]; then
               status="✅ 正常"
             else
-              # 000 是 curl 超时或网络错误的默认值
               status="❌ 异常"
             fi
             
-            # 格式化结果行
             result="${website_name}： <a href='${website_url}'>${website_url}</a>\n    状态: ${status} (状态码: ${status_code})\n\n"
-            
-            # 打印到日志
             echo -e "$result"
-            
-            # 追加到总报告
             report="${report}${result}"
           done
           
-          echo "报告生成完毕，写入 GITHUB_OUTPUT..."
-
-          # 5. 将报告内容输出到 GITHUB_OUTPUT 供后续步骤使用
+          # 将报告内容输出到 GITHUB_OUTPUT
           # 使用 EOF 标记安全地传递多行内容
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo -e "$report" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 步骤 3: 发送报告到 Telegram
-      - name: 3. 发送报告到 Telegram
-        # 仅当 TG_BOT_TOKEN 和 TG_CHAT_ID 存在时才运行此步骤
-        if: env.TG_BOT_TOKEN && env.TG_CHAT_ID
+      - name: 发送报告到 Telegram
         run: |
-          # 从上一步的输出中获取完整的 HTML 报告
           report="${{ steps.check.outputs.report }}"
-          
-          # 使用 curl 调用 Telegram Bot API
-          # -H "Content-Type: application/json": 确保请求体是 JSON 格式
-          # "parse_mode": "HTML": 允许报告内容使用 HTML 标签进行格式化
-          # "disable_web_page_preview": true: 禁用 URL 预览，保持消息简洁
+          # 确保 report 变量用双引号包裹在 JSON 字符串中，防止内容中的特殊字符破坏 JSON 结构
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"${report}\", \"parse_mode\": \"HTML\", \"disable_web_page_preview\": true}"
 
-      # 步骤 4: 在工作流日志中显示最终报告 (便于调试和查看)
-      - name: 4. 打印最终报告到日志
+      - name: 显示报告
         run: |
-          echo "--- 完整的网站状态报告 ---"
           echo -e "${{ steps.check.outputs.report }}"
