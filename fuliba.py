@@ -32,9 +32,9 @@ def send_telegram_notification(title, message):
         print("⚠️ Telegram Token 或 Chat ID 未配置，跳过发送通知。")
         return
 
-    # 获取当前香港时间 (UTC+8)
+    # 获取当前北京时间 (UTC+8)
     now_utc8 = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
-    time_str = now_utc8.strftime('%Y-%m-%d %H:%M:%S HKT')
+    time_str = now_utc8.strftime('%Y-%m-%d %H:%M:%S')
 
     full_message = f"🎉 **{title}**\n\n🕒 **运行时间：**{time_str}\n\n{message}"
 
@@ -193,4 +193,5 @@ if __name__ == '__main__':
         error_message = f"【福利吧】脚本运行异常: {e}"
         print(f"❌ {error_message}")
         send_telegram_notification("福利吧签到失败", error_message)
+
         sys.exit(1)
