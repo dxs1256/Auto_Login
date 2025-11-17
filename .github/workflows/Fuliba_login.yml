@@ -32,4 +32,4 @@ jobs:
         FUBA: ${{ secrets.FUBA }}             # 您的登录 Cookie
         FUBAUN: ${{ secrets.FUBAUN }}         # 您的账号名 (用于日志)
         SOCKS5_PROXY_URL: ${{ secrets.SOCKS5_PROXY_URL }} # 🚨 SOCKS5 代理地址
-      run: python 你的脚本文件名.py
+      run: python fuliba.py
