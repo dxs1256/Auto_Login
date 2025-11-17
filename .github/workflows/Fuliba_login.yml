@@ -37,4 +37,5 @@ jobs:
           # 从 GitHub Secrets 中获取福利吧账号信息
           FUBA: ${{ secrets.FUBA }}
           FUBAUN: ${{ secrets.FUBAUN }}
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}   # ← 关键！
         run: python fuliba.py # 运行你的脚本文件
