@@ -19,7 +19,7 @@ CHECKIN_URL = "https://www.wnflb2023.com/plugin.php"
 # 通用请求头
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36",
-    # Cookie 将在 get_formhash 和 perform_checkin 函数中从环境变量读取并设置
+    # Cookie 将在请求发送时从环境变量读取并设置
     "Referer": REFERER_URL, 
     "X-Requested-With": "XMLHttpRequest" 
 }
@@ -30,7 +30,7 @@ def get_formhash(session):
     """访问参考页面，并使用正则表达式从 HTML 中提取 formhash"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 正在尝试获取最新的 Formhash...")
     try:
-        # ⚠️ 必须设置 Cookie 头，以保持会话状态
+        # 必须设置 Cookie 头，以保持会话状态
         current_headers = HEADERS.copy()
         current_headers['Cookie'] = SESSION_COOKIE
         
@@ -55,7 +55,7 @@ def get_formhash(session):
 # --- 函数：执行签到操作 ---
 
 def perform_checkin():
-    """执行签到请求"""
+    """执行签到请求 (使用 POST 方法)"""
     
     # 1. 初始化 Session
     session = requests.Session()
@@ -77,22 +77,22 @@ def perform_checkin():
     }
     
     # 4. 发送签到请求
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 正在发送签到请求...")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 正在发送 POST 签到请求...")
     try:
-        # ⚠️ 再次设置 Cookie 头，确保随请求发出
         current_headers = HEADERS.copy()
         current_headers['Cookie'] = SESSION_COOKIE
         
-        checkin_response = session.get(
+        # 🚀 关键修改点：使用 session.post 代替 session.get，并用 data=payload 模拟表单提交
+        checkin_response = session.post(
             CHECKIN_URL, 
-            params=payload, 
+            data=payload,  # 将参数作为 POST body 发送
             headers=current_headers, 
             timeout=10
         )
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 服务器响应状态码: {checkin_response.status_code}")
         
-# 5. 分析响应内容 (调试模式：打印原始响应)
+        # 5. 分析响应内容 (调试模式：打印原始响应)
         response_text = checkin_response.text
         
         print("--- 服务器原始响应内容 START ---")
@@ -106,13 +106,13 @@ def perform_checkin():
         else:
             print("❓ 签到完成，但无法确定结果。")
 
+
     except requests.exceptions.RequestException as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 致命错误：执行签到请求时发生网络错误: {e}")
 
 # --- 主程序入口 ---
 if __name__ == "__main__":
     if not SESSION_COOKIE:
-        print("!!! 运行错误：未找到 COOKIE。请设置名为 'FUBA' 的环境变量，并将您的会话 Cookie 字符串作为其值。!!!")
+        print("!!! 运行错误：未找到 COOKIE。请确保 FUBA 环境变量已正确设置。!!!")
     else:
         perform_checkin()
-
