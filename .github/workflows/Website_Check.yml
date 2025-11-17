@@ -6,12 +6,6 @@ name: 网站状态定时检查
 on:
   # 允许手动在 GitHub 页面上触发工作流
   workflow_dispatch:
-    inputs:
-      reason:
-        description: '手动触发的原因'
-        required: false
-        default: '例行检查'
-
   # 设置定时任务 (Cron Job)
   schedule:
     # '0 */6 * * *' 表示每天每隔 6 小时在整点执行 (例如 00:00, 06:00, 12:00, 18:00 UTC)
