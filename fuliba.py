@@ -92,18 +92,19 @@ def perform_checkin():
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 服务器响应状态码: {checkin_response.status_code}")
         
-        # 5. 分析响应内容
+# 5. 分析响应内容 (调试模式：打印原始响应)
         response_text = checkin_response.text
         
+        print("--- 服务器原始响应内容 START ---")
+        print(response_text)
+        print("--- 服务器原始响应内容 END ---")
+
         if "签名出错" in response_text or "请重新登陆" in response_text:
-            print("❌ 签到失败：会话过期或签名错误。请更新 FUBA 环境变量中的 COOKIE！")
+            print("❌ 签到失败：会话过期或签名错误。")
         elif "已签到" in response_text or "恭喜" in response_text:
             print("✅ 签到成功！")
         else:
-            print("❓ 签到完成，但无法确定结果。服务器返回：")
-            print("--- 响应内容 START ---")
-            print(response_text)
-            print("--- 响应内容 END ---")
+            print("❓ 签到完成，但无法确定结果。")
 
     except requests.exceptions.RequestException as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 致命错误：执行签到请求时发生网络错误: {e}")
@@ -114,3 +115,4 @@ if __name__ == "__main__":
         print("!!! 运行错误：未找到 COOKIE。请设置名为 'FUBA' 的环境变量，并将您的会话 Cookie 字符串作为其值。!!!")
     else:
         perform_checkin()
+
