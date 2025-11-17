@@ -1,31 +1,57 @@
 import requests
 import re
 import os
+import sys # 新增，用于退出
 from datetime import datetime
 
 # --- 配置区：从环境变量读取敏感信息 ---
 SESSION_COOKIE = os.environ.get('FUBA')
 ACCOUNT_USERNAME = os.environ.get('FUBAUN', '未知用户') 
+# 🚨 新增：读取 SOCKS5 代理 URL
+SOCKS5_PROXY_URL = os.environ.get('SOCKS5_PROXY_URL')
+
 REFERER_URL = "https://www.wnflb2023.com/" 
 CHECKIN_URL = "https://www.wnflb2023.com/plugin.php"
 
 # 通用请求头
 HEADERS = {
-    # 🚨 关键修改：使用用户提供的完整 User-Agent
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
     "Referer": REFERER_URL, 
     "X-Requested-With": "XMLHttpRequest",
-    "Content-Type": "application/x-www-form-urlencoded"  # 模拟表单 POST 提交
+    "Content-Type": "application/x-www-form-urlencoded"
 }
 
-# --- 函数：动态获取 Formhash ---
+# --- 函数：初始化 Session 并配置代理 ---
+def initialize_session():
+    """初始化 requests Session 并配置 SOCKS5 代理"""
+    session = requests.Session()
+    
+    if SOCKS5_PROXY_URL:
+        # 验证 requests-socks 依赖是否安装
+        try:
+            from requests.packages.urllib3.contrib import socks
+            socks.set_socket(socks.create_connection) # 确保 socks 库可用
+        except ImportError:
+            print("!!! 错误：检测到 SOCKS5 代理，但缺少 requests[socks] 依赖。")
+            print("!!! 请在 GitHub Actions 中运行 'pip install requests[socks]' !!!")
+            sys.exit(1) # 退出脚本
+
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 正在使用 SOCKS5 代理...")
+        session.proxies = {
+            'http': SOCKS5_PROXY_URL,
+            'https': SOCKS5_PROXY_URL
+        }
+        
+    return session
+
+# --- 函数：动态获取 Formhash (保持不变) ---
 def get_formhash(session):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 正在尝试获取最新的 Formhash...")
     try:
         current_headers = HEADERS.copy()
         current_headers['Cookie'] = SESSION_COOKIE
         
-        response = session.get(REFERER_URL, headers=current_headers, timeout=10)
+        response = session.get(REFERER_URL, headers=current_headers, timeout=15) # 增加超时时间
         match = re.search(r'formhash=([0-9a-fA-F]{8,})', response.text) 
         
         if match:
@@ -36,15 +62,18 @@ def get_formhash(session):
             print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 错误：未能在页面内容中找到 Formhash。")
             return None
     except requests.exceptions.RequestException as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 错误：访问 {REFERER_URL} 时发生网络错误: {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 致命错误：访问 {REFERER_URL} 时发生网络错误或代理连接失败: {e}")
         return None
 
-# --- 函数：执行签到操作 ---
+# --- 函数：执行签到操作 (保持不变) ---
 def perform_checkin():
-    session = requests.Session()
+    # 1. 初始化 Session (使用新的初始化函数)
+    session = initialize_session() 
+    
+    # 2. 获取 Formhash
     formhash = get_formhash(session)
     if not formhash:
-        print(f"[{datetime.now().strftime('%H:%MZ')}] 账号: {ACCOUNT_USERNAME} | 签到失败：无法获取 Formhash。")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 签到失败：无法获取 Formhash。")
         return
 
     payload = {
@@ -61,17 +90,15 @@ def perform_checkin():
         current_headers = HEADERS.copy()
         current_headers['Cookie'] = SESSION_COOKIE
         
-        # 使用 POST 请求和 data=payload 发送
         checkin_response = session.post(
             CHECKIN_URL, 
             data=payload,  
             headers=current_headers, 
-            timeout=10
+            timeout=15 # 增加超时时间
         )
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 服务器响应状态码: {checkin_response.status_code}")
         
-        # 5. 分析响应内容 (调试模式：打印原始响应)
         response_text = checkin_response.text
         
         print("--- 服务器原始响应内容 START ---")
@@ -84,7 +111,6 @@ def perform_checkin():
             print("✅ 签到成功！")
         else:
             print("❓ 签到完成，但无法确定结果。")
-
 
     except requests.exceptions.RequestException as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 致命错误：执行签到请求时发生网络错误: {e}")
