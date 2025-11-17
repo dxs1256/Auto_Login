@@ -1,13 +1,12 @@
 import requests
 import re
 import os
-import sys # 新增，用于退出
+import sys
 from datetime import datetime
 
 # --- 配置区：从环境变量读取敏感信息 ---
 SESSION_COOKIE = os.environ.get('FUBA')
 ACCOUNT_USERNAME = os.environ.get('FUBAUN', '未知用户') 
-# 🚨 新增：读取 SOCKS5 代理 URL
 SOCKS5_PROXY_URL = os.environ.get('SOCKS5_PROXY_URL')
 
 REFERER_URL = "https://www.wnflb2023.com/" 
@@ -27,16 +26,20 @@ def initialize_session():
     session = requests.Session()
     
     if SOCKS5_PROXY_URL:
-        # 验证 requests-socks 依赖是否安装
+        # 验证 requests-socks 依赖是否安装，并配置代理
         try:
-            from requests.packages.urllib3.contrib import socks
-            socks.set_socket(socks.create_connection) # 确保 socks 库可用
+            # 尝试导入 requests-socks 模块
+            import socks
         except ImportError:
+            # 如果导入失败，则依赖未安装
             print("!!! 错误：检测到 SOCKS5 代理，但缺少 requests[socks] 依赖。")
             print("!!! 请在 GitHub Actions 中运行 'pip install requests[socks]' !!!")
-            sys.exit(1) # 退出脚本
+            sys.exit(1)
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 正在使用 SOCKS5 代理...")
+        
+        # 🎯 关键修复：移除 'socks.set_socket(socks.create_connection)' 这一行
+        
         session.proxies = {
             'http': SOCKS5_PROXY_URL,
             'https': SOCKS5_PROXY_URL
@@ -44,14 +47,14 @@ def initialize_session():
         
     return session
 
-# --- 函数：动态获取 Formhash (保持不变) ---
+# --- 函数：动态获取 Formhash ---
 def get_formhash(session):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 正在尝试获取最新的 Formhash...")
     try:
         current_headers = HEADERS.copy()
         current_headers['Cookie'] = SESSION_COOKIE
         
-        response = session.get(REFERER_URL, headers=current_headers, timeout=15) # 增加超时时间
+        response = session.get(REFERER_URL, headers=current_headers, timeout=15)
         match = re.search(r'formhash=([0-9a-fA-F]{8,})', response.text) 
         
         if match:
@@ -65,12 +68,9 @@ def get_formhash(session):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 致命错误：访问 {REFERER_URL} 时发生网络错误或代理连接失败: {e}")
         return None
 
-# --- 函数：执行签到操作 (保持不变) ---
+# --- 函数：执行签到操作 ---
 def perform_checkin():
-    # 1. 初始化 Session (使用新的初始化函数)
     session = initialize_session() 
-    
-    # 2. 获取 Formhash
     formhash = get_formhash(session)
     if not formhash:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 签到失败：无法获取 Formhash。")
@@ -94,7 +94,7 @@ def perform_checkin():
             CHECKIN_URL, 
             data=payload,  
             headers=current_headers, 
-            timeout=15 # 增加超时时间
+            timeout=15
         )
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 账号: {ACCOUNT_USERNAME} | 服务器响应状态码: {checkin_response.status_code}")
