@@ -40,7 +40,7 @@ def tg(msg):
         except:
             pass
 
-# ==================== 核心签到+信息抓取 ====================
+# ==================== 核心签到 + 信息抓取 ====================
 def sign_and_report(user, pwd):
     s = requests.Session()
     s.proxies.update(proxies)
@@ -79,7 +79,7 @@ def sign_and_report(user, pwd):
             m = re.search(r"获得\s*([\d,]+)\s*威望", checkin_resp)
             reward = m.group(1).replace(",", "") if m else "?"
 
-        # 3. 今天第几名
+        # 3. 今日排名
         ajax_resp = s.get(
             f"{base}/plugin.php?id=fx_checkin:ajax&date={time.strftime('%Y%m')}&inajax=1",
             timeout=15
@@ -87,29 +87,30 @@ def sign_and_report(user, pwd):
         rank = re.search(fr'"{int(time.strftime("%d"))}".*?"l":(\d+)', ajax_resp)
         rank = rank.group(1) if rank else "?"
 
-        # 4. 连签、累计、个人排名 —— 超级稳的三重保险抓取
+        # 4. 连签、累计、个人排名（三重保险，彻底杜绝 1987）
         list_html = s.get(f"{base}/plugin.php?id=fx_checkin:list", timeout=15).text
 
-        # 保险1：优先精准定位包含用户名的 <tr>
-        user_row = re.search(rf"{re.escape(user)}.*?(?=<tr|<div|$)", list_html, re.S | re.I)
-        text_block = user_row.group(0) if user_row else list_html
+        # 保险1：优先找包含用户名的行
+        user_block = re.search(rf"{re.escape(user)}.*?(?:连签|累计|排名).*?(?=<|<|$)", list_html, re.S)
+        block = user_block.group(0) if user_block else list_html
 
-        # 保险2：再从块里提取
-        streak = re.search(r"连签\D*(\d+)", text_block)
-        total  = re.search(r"累计\D*(\d+)", text_block)
-        prank  = re.search(r"排名\D*(\d+)", text_block)
+        # 连签 & 累计（基本不会错）
+        streak = re.search(r"连签\D*(\d+)", block) or re.search(r"连签\D*(\d+)", list_html)
+        total  = re.search(r"累计\D*(\d+)", block) or re.search(r"累计\D*(\d+)", list_html)
 
-        # 保险3：如果上面没抓到，就全局再扫一遍（基本不可能走到这）
-        if not streak:
-            streak = re.search(r"连签\D*(\d+)", list_html)
-        if not total:
-            total = re.search(r"累计\D*(\d+)", list_html)
-        if not prank:
-            prank = re.search(r"排名\D*(\d+)", list_html)
+        # 个人排名（关键修复！）
+        # 先尝试“个人排名”关键词（最准）
+        prank_match = re.search(r"个人排名\D*(\d+)", list_html)
+        if prank_match:
+            prank = prank_match.group(1)
+        else:
+            # 再尝试在用户名附近找“排名”后面的 6 位数（防止抓到 1987）
+            prank = re.search(rf"{re.escape(user)}[^\d]*\d+[^\d]*排名\D*(\d{{5,}})", list_html)
+            prank = prank.group(1) if prank else "?"
 
         streak = streak.group(1) if streak else "?"
         total  = total.group(1) if total else "?"
-        prank  = prank.group(1) if prank else "?"
+        prank = prank.strip()
 
         # 5. 组装消息
         lines = [f"用户 <b>{user}</b>"]
