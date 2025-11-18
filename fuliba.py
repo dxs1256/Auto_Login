@@ -30,8 +30,8 @@ DOMAINS = [
     "https://www.wnflb2025.com",
     "https://www.wnflb2026.com",
     "https://www.wnflb2027.com",
-    "https://wnflb.org",
-    "https://wnflb.co",
+    "https://www.wnflb00.com",
+    "https://www.wnflb99.com",
 ]
 
 HEADERS = {
