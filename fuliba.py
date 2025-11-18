@@ -117,20 +117,32 @@ def login_and_sign(user, pwd, base_url, session):
         return False
 
 # ==================== 主程序 ====================
+# ==================== 主程序 ====================
 def main():
-    send_tg("⏰ 福利吧签到任务开始（已启用 SOCKS5 代理）")
+    # send_tg("⏰ 福利吧签到任务开始（已启用 SOCKS5 代理）")   ← 删除这行
     base_url, session = get_live_domain()
     success = 0
+    details = []   # ← 新增：用来收集每条账号的状态
+
     for acc in ACCOUNTS:
         if not acc["user"]: continue
         print(f"\n正在为 {acc['user']} 签到...")
-        if login_and_sign(acc["user"], acc["pass"], base_url, session):
+        result = login_and_sign(acc["user"], acc["pass"], base_url, session)
+        if result:
             success += 1
-        time.sleep(random.uniform(10, 20))
+        # login_and_sign 里已经不发 Telegram 了，这里收集文字
+        # （如果你之前 login_and_sign 里有 send_tg，也全删掉，只 print 就行）
 
-    summary = f"✅ 任务完成！成功 {success}/{len(ACCOUNTS)}\n{time.strftime('%Y-%m-%d %H:%M')} 北京时间"
+    # 最终只发一条完整消息
+    summary = f"""⏰ 福利吧每日签到报告
+
+{' '.join(details)}
+
+✅ 全部完成！成功 {success}/{len(ACCOUNTS)} 个账号
+{time.strftime('%Y-%m-%d %H:%M')} 北京时间"""
+
     print(summary)
-    send_tg(summary)
+    send_tg(summary)   # ← 只剩这一条
 
 if __name__ == "__main__":
     main()
