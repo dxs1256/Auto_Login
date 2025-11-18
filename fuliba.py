@@ -82,7 +82,7 @@ def login_and_sign(user, pwd, base_url, session):
         text = r.text
 
         if "今日已经签到" in text or "已签到" in text:
-            return "✅ 今天已经签到过了"
+            return "🎉 今天已经签到过了"
         elif "签到成功" in text or "获得" in text:
             reward = re.search(r"获得\s*([\d,]+)\s*威望", text)
             reward = reward.group(1).replace(",", "") if reward else "?"
