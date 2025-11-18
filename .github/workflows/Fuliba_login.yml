@@ -29,7 +29,7 @@ jobs:
         run: |
           python fuliba.py
 
-      - name: Telegram 通知（可选）
+      - name: Telegram 通知
         if: always()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
