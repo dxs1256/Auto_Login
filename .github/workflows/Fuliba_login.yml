@@ -2,7 +2,7 @@ name: 福利吧每日自动签到
 
 on:
   schedule:
-    - cron: '0 16 * * *'   # 每天 UTC 时间 16:00 → 北京时间次日 00:00
+    - cron: '0 */6 * * *'   # 每 6 小时整点运行一次（UTC 时间）
   workflow_dispatch:
 
 jobs:
