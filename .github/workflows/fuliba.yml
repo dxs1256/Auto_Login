@@ -25,6 +25,7 @@ jobs:
           WNFLB_USERS: ${{ secrets.WNFLB_USERS }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
         run: |
           python fuliba.py
 
