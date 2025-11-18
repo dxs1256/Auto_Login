@@ -28,9 +28,3 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           python fuliba.py
-
-      # 这条可以删掉或注释掉（脚本自己发完整消息了）
-      # - name: Telegram 通知
-      #   if: always()
-      #   run: |
-      #     curl -s -X POST ...
