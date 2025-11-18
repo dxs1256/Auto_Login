@@ -26,6 +26,8 @@ DOMAINS = [
     "https://www.wnflb2023.com",
     "https://www.wnflb2024.com",
     "https://www.wnflb2025.com"
+    "https://www.wnflb00.com"
+    "https://www.wnflb99.com"
 ]
 
 # ==================== Telegram 推送 ====================
