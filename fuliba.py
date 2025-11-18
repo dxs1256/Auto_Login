@@ -6,16 +6,14 @@ import re
 import os
 import time
 import random
-from datetime import datetime
-import pytz
 
-# ==================== 代理 ====================
+# ==================== 代理（从 Secrets 读取） ====================
 PROXY = os.getenv("SOCKS5_PROXY", "")
 if not PROXY:
     raise Exception("未设置 SOCKS5_PROXY 环境变量！")
 proxies = {"http": f"socks5://{PROXY}", "https": f"socks5://{PROXY}"}
 
-# ==================== 账号 ====================
+# ==================== 账号（支持多账号） ====================
 WNFLB_USERS = os.getenv("WNFLB_USERS", "")
 if WNFLB_USERS:
     pairs = [x.strip() for x in WNFLB_USERS.split("|||") if x.strip()]
@@ -23,7 +21,7 @@ if WNFLB_USERS:
 else:
     ACCOUNTS = [{"user": os.getenv("WNFLB_USERNAME", ""), "pass": os.getenv("WNFLB_PASSWORD", "")}]
 
-# ==================== Telegram ====================
+# ==================== Telegram 配置 ====================
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_CHAT_ID   = os.getenv("TG_CHAT_ID", "")
 
@@ -38,10 +36,10 @@ def send_tg(msg):
         except:
             pass
 
-# ==================== 域名 ====================
+# ==================== 域名轮询 ====================
 DOMAINS = [
     "https://www.wnflb2023.com","https://www.wnflb2024.com","https://www.wnflb2025.com",
-    "https://wnflb.org","https://wnflb.co"
+    "https://www.wnflb00.com","https://www.wnflb99.com"
 ]
 
 def get_live_domain():
@@ -62,17 +60,23 @@ def login_and_sign(user, pwd, base_url, session):
     try:
         r = session.get(f"{base_url}/forum.php", timeout=15)
         formhash = re.search(r'name="formhash" value="([a-f0-9]{8})"', r.text)
-        if not formhash: return "获取 formhash 失败"
+        if not formhash:
+            return "❌ 获取 formhash 失败"
 
         login_url = f"{base_url}/member.php?mod=logging&action=login&loginsubmit=yes&inajax=1"
         data = {
-            "formhash": formhash.group(1), "referer": f"{base_url}/forum.php",
-            "loginfield": "username", "username": user, "password": pwd,
-            "questionid": "0", "answer": "", "cookietime": "2592000"
+            "formhash": formhash.group(1),
+            "referer": f"{base_url}/forum.php",
+            "loginfield": "username",
+            "username": user,
+            "password": pwd,
+            "questionid": "0",
+            "answer": "",
+            "cookietime": "2592000"
         }
         r = session.post(login_url, data=data, headers={"X-Requested-With": "XMLHttpRequest"}, timeout=15)
         if "欢迎您回来" not in r.text and "succeedhandle" not in r.text:
-            return "登录失败"
+            return "❌ 登录失败（可能密码错或代理问题）"
 
         r = session.get(f"{base_url}/plugin.php?id=fx_checkin:checkin", timeout=15)
         text = r.text
@@ -84,11 +88,11 @@ def login_and_sign(user, pwd, base_url, session):
             reward = reward.group(1).replace(",", "") if reward else "?"
             return f"🎉 签到成功！获得 <b>{reward}</b> 威望"
         else:
-            return "签到失败"
+            return "❌ 签到失败（未知返回）"
     except Exception as e:
-        return f"异常: {str(e)}"
+        return f"❌ 异常: {str(e)}"
 
-# ==================== 主程序（只发一条） ====================
+# ==================== 主程序（每天只发一条消息） ====================
 def main():
     base_url, session = get_live_domain()
     status_lines = []
@@ -103,12 +107,13 @@ def main():
             success += 1
         time.sleep(random.uniform(10, 20))
 
-    # 北京时间
-    bj_time = datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M')
+    # 北京时间（零依赖，GitHub Actions 必备）
+    bj_time = time.strftime('%Y-%m-%d %H:%M', time.gmtime(time.time() + 28800))
 
     final_message = f"""⏰ 福利吧每日签到报告
 
 {' '.join(status_lines)}
+
 ✅ 全部完成！成功 {success}/{len(ACCOUNTS)} 个账号
 {bj_time} 北京时间"""
 
