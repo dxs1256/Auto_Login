@@ -28,10 +28,3 @@ jobs:
           SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
         run: |
           python fuliba.py
-
-      - name: Telegram 通知
-        if: always()
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
-               -d chat_id=${{ secrets.TG_CHAT_ID }} \
-               -d text="福利吧签到任务已完成（$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M') 北京时间）"
