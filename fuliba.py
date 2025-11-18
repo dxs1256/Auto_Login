@@ -57,15 +57,32 @@ def sign_and_report(user, pwd):
         rank_match = re.search(fr'"{int(today)}".*?"l":(\d+)', ajax)
         rank = rank_match.group(1) if rank_match else "?"
 
-        # 4. 连签、累计、个人排名（list接口）
+        # 4. 精准抓取连签、累计、排名（已修复）
         list_html = s.get(base + "/plugin.php?id=fx_checkin:list").text
-        streak = re.search(r"连签\D*(\d+)天", list_html)
-        total  = re.search(r"累计\D*(\d+)天", list_html)
-        personal_rank = re.search(r"个人排名\D*(\d+)", list_html)
+        streak = total = personal_rank = "?"
 
-        streak = streak.group(1) if streak else "?"
-        total  = total.group(1) if total else "?"
-        personal_rank = personal_rank.group(1) if personal_rank else "?"
+        # 方法1：优先找包含你用户名的那一行（最准）
+        user_block = re.search(rf"{re.escape(user)}[^<]*<", list_html)
+        if user_block:
+            block = user_block.group(0)
+            streak = re.search(r"(\d+)天", block.split("连签")[1] if "连签" in block else block)
+            total  = re.search(r"(\d+)天", block.split("累计")[1] if "累计" in block else block)
+            personal_rank = re.search(r"排名\D*(\d+)", block)
+
+        # 方法2：兜底全局匹配（兼容各种模板）
+        if streak: streak = streak.group(1)
+        if total: total = total.group(1)
+        if personal_rank: personal_rank = personal_rank.group(1)
+
+        if not streak or not total or not personal_rank:
+            streak = streak or re.search(r"连签\D*(\d+)", list_html).group(1) if re.search(r"连签\D*(\d+)", list_html) else "?"
+            total = total or re.search(r"累计\D*(\d+)", list_html).group(1) if re.search(r"累计\D*(\d+)", list_html) else "?"
+            personal_rank = personal_rank or re.search(r"排名\D*(\d+)", list_html).group(1) if re.search(r"排名\D*(\d+)", list_html) else "?"
+
+        lines += [
+            f"🔥 连签 <b>{streak}</b> 天｜累计 <b>{total}</b> 天",
+            f"👤 个人排名第 <b>{personal_rank}</b> 位"
+        ]
 
         # 5. 组装最终消息
         lines = [f"用户 <b>{user}</b>"]
