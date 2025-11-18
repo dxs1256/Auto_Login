@@ -1,0 +1,44 @@
+name: 福利吧每日自动签到
+
+on:
+  schedule:
+    # 北京时间每天早上 9:00 签到（UTC 时间要减 8 小时）
+    - cron: '0 1 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sign-in:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests urllib3
+
+      - name: 运行福利吧签到脚本
+        env:
+          # 在这里填你的账号密码（强烈推荐使用 GitHub Secrets）
+          WNFLB_USERNAME: ${{ secrets.WNFLB_USERNAME }}
+          WNFLB_PASSWORD: ${{ secrets.WNFLB_PASSWORD }}
+          # 如果你想支持多账号，可以再加 WNFLB_USER2、WNFLB_PASS2 ...
+        run: |
+          # 动态替换脚本中的用户名密码（最简单粗暴的方式）
+          sed -i "s/USERNAME = \".*\"/USERNAME = \"${WNFLB_USERNAME}\"/" wnflb_sign.py
+          sed -i "s/PASSWORD = \".*\"/PASSWORD = \"${WNFLB_PASSWORD}\"/" wnflb_sign.py
+          
+          python fuliba.py
+
+      - name: （可选）签到结果推送到 Telegram
+        if: always()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+               -d chat_id=${{ secrets.TG_CHAT_ID }} \
+               -d text="福利吧签到任务已完成（$(date '+%Y-%m-%d %H:%M:%S'） 北京时间)"
