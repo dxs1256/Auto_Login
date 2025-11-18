@@ -1,8 +1,8 @@
-name: 福利吧自动签到
+name: 福利吧每日自动签到
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1 * * *'   # UTC 1:00 = 北京时间 9:00
   workflow_dispatch:
 
 jobs:
@@ -16,15 +16,21 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 安装依赖（必须加 pysocks！）
+      - name: 安装依赖（必须！）
         run: |
-          pip install requests urllib3 pysocks   # ← 这行是救命稻草
+          pip install requests urllib3 pysocks   # pysocks 支持 SOCKS5 代理
 
       - name: 执行福利吧签到
         env:
           WNFLB_USERS: ${{ secrets.WNFLB_USERS }}
+          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
         run: |
           python fuliba.py
+
+      # 这条可以删掉或注释掉（脚本自己发完整消息了）
+      # - name: Telegram 通知
+      #   if: always()
+      #   run: |
+      #     curl -s -X POST ...
