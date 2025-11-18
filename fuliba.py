@@ -13,7 +13,7 @@ if not PROXY:
     raise Exception("未设置 SOCKS5_PROXY")
 proxies = {"http": f"socks5://{PROXY}", "https": f"socks5://{PROXY}"}
 
-ACCOUNTS = [{"user": p.split(":")[0], "pass": p.split(":")[1]} 
+ACCOUNTS = [{"user": p.split(":")[0], "pass": p.split(":")[1]}
             for p in os.getenv("WNFLB_USERS", "").split("|||") if ":" in p]
 
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN")
@@ -26,67 +26,63 @@ def tg(msg):
         try:
             requests.post(f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
                           data={"chat_id": TG_CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=10)
-        except: pass
+        except:
+            pass
 
 def sign_and_report(user, pwd):
     s = requests.Session()
     s.proxies.update(proxies)
     base = next((d for d in DOMAINS if s.get(d+"/forum.php", timeout=12).ok), None)
-    if not base: return "所有域名失联"
+    if not base:
+        return "❌ 所有域名失联"
 
     try:
         # 1. 登录
-        html = s.get(base + "/forum.php").text
-        formhash = re.search(r'formhash" value="(\w{8})"', html).group(1)
-        s.post(base + "/member.php?mod=logging&action=login&loginsubmit=yes&inajax=1",
-               data={"formhash":formhash,"username":user,"password":pwd,"cookietime":2592000},
-               headers={"X-Requested-With":"XMLHttpRequest"}, timeout=12)
+        html = s.get(f"{base}/forum.php", timeout=15).text
+        formhash = re.search(r'formhash" value="(\w{8})"', html)
+        if not formhash:
+            return "❌ 获取 formhash 失败"
+        formhash = formhash.group(1)
 
-        # 2. 签到 + 奖励
-        resp = s.get(base + "/plugin.php?id=fx_checkin:checkin").text
-        if "已签到" in resp or "今日已经签到" in resp:
-            already = True
+        s.post(f"{base}/member.php?mod=logging&action=login&loginsubmit=yes&inajax=1",
+               data={"formhash":formhash, "username":user, "password":pwd, "cookietime":2592000},
+               headers={"X-Requested-With":"XMLHttpRequest"}, timeout=15)
+
+        # 2. 签到结果
+        checkin_resp = s.get(f"{base}/plugin.php?id=fx_checkin:checkin", timeout=15).text
+        already_signed = "今日已经签到" in checkin_resp or "已签到" in checkin_resp
+        reward = "?"
+        if not already_signed and "签到成功" in checkin_resp:
+            reward_match = re.search(r"获得\s*([\d,]+)\s*威望", checkin_resp)
+            reward = reward_match.group(1).replace(",", "") if reward_match else "?"
+
+        # 3. 今日排名（ajax接口）
+        today = time.strftime("%d")
+        ajax_resp = s.get(f"{base}/plugin.php?id=fx_checkin:ajax&date={time.strftime('%Y%m')}&inajax=1", timeout=15).text
+        rank = re.search(fr'"{int(today)}".*?"l":(\d+)', ajax_resp)
+        rank = rank.group(1) if rank else "?"
+
+        # 4. 连签、累计、个人排名（list页面）—— 多重正则兜底
+        list_html = s.get(f"{base}/plugin.php?id=fx_checkin:list", timeout=15).text
+
+        # 优先找包含用户名的行（最准）
+        user_line = re.search(rf"{re.escape(user)}.*?(连签.*?|累计.*?|排名.*?){{0,3}}", list_html, re.S)
+        if user_line:
+            text = user_line.group(0)
         else:
-            already = False
-            reward = re.search(r"获得\s*([\d,]+)\s*威望", resp)
-            reward = reward.group(1).replace(",", "") if reward else "?"
+            text = list_html
 
-        # 3. 今天第几名 + 时间（ajax接口）
-        today = time.strftime("%d").lstrip("0")
-        ajax = s.get(base + f"/plugin.php?id=fx_checkin:ajax&date={time.strftime('%Y%m')}&inajax=1").text
-        rank_match = re.search(fr'"{int(today)}".*?"l":(\d+)', ajax)
-        rank = rank_match.group(1) if rank_match else "?"
+        streak = re.search(r"连签\D*(\d+)", text)
+        total  = re.search(r"累计\D*(\d+)", text)
+        prank  = re.search(r"排名\D*(\d+)", text) or re.search(r"个人排名\D*(\d+)", text)
 
-        # 4. 精准抓取连签、累计、排名（已修复）
-        list_html = s.get(base + "/plugin.php?id=fx_checkin:list").text
-        streak = total = personal_rank = "?"
+        streak = streak.group(1) if streak else "?"
+        total  = total.group(1) if total else "?"
+        prank = prank.group(1) if prank else "?"
 
-        # 方法1：优先找包含你用户名的那一行（最准）
-        user_block = re.search(rf"{re.escape(user)}[^<]*<", list_html)
-        if user_block:
-            block = user_block.group(0)
-            streak = re.search(r"(\d+)天", block.split("连签")[1] if "连签" in block else block)
-            total  = re.search(r"(\d+)天", block.split("累计")[1] if "累计" in block else block)
-            personal_rank = re.search(r"排名\D*(\d+)", block)
-
-        # 方法2：兜底全局匹配（兼容各种模板）
-        if streak: streak = streak.group(1)
-        if total: total = total.group(1)
-        if personal_rank: personal_rank = personal_rank.group(1)
-
-        if not streak or not total or not personal_rank:
-            streak = streak or re.search(r"连签\D*(\d+)", list_html).group(1) if re.search(r"连签\D*(\d+)", list_html) else "?"
-            total = total or re.search(r"累计\D*(\d+)", list_html).group(1) if re.search(r"累计\D*(\d+)", list_html) else "?"
-            personal_rank = personal_rank or re.search(r"排名\D*(\d+)", list_html).group(1) if re.search(r"排名\D*(\d+)", list_html) else "?"
-
-        lines += [
-            f"🔥 连签 <b>{streak}</b> 天｜累计 <b>{total}</b> 天",
-            f"👤 个人排名第 <b>{personal_rank}</b> 位"
-        ]
-
-        # 5. 组装最终消息
+        # 5. 组装消息
         lines = [f"用户 <b>{user}</b>"]
-        if already:
+        if already_signed:
             lines.append("✅ 今天已经签到过了")
         else:
             lines.append(f"🎉 签到成功！获得 <b>{reward}</b> 威望")
@@ -94,12 +90,12 @@ def sign_and_report(user, pwd):
         lines += [
             f"🏆 今天第 <b>{rank}</b> 名签到",
             f"🔥 连签 <b>{streak}</b> 天｜累计 <b>{total}</b> 天",
-            f"👤 个人排名第 <b>{personal_rank}</b> 位"
+            f"👤 个人排名第 <b>{prank}</b> 位"
         ]
         return "\n".join(lines)
 
     except Exception as e:
-        return f"❌ 出错：{str(e)}"
+        return f"❌ {user} 出错：{str(e)}"
 
 def main():
     results = []
