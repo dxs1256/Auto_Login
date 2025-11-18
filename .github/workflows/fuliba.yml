@@ -2,8 +2,8 @@ name: 福利吧每日自动签到
 
 on:
   schedule:
-    - cron: '0 1 * * *'      # UTC 1:00 = 北京时间 9:00
-  workflow_dispatch:       # 支持手动触发
+    - cron: '0 1 * * *'
+  workflow_dispatch:
 
 jobs:
   sign:
@@ -16,21 +16,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 安装依赖
-        run: pip install requests urllib3
+      - name: 安装依赖（必须加 pysocks！）
+        run: |
+          pip install requests urllib3 pysocks   # ← 这行是救命稻草
 
       - name: 执行福利吧签到
         env:
-          # 推荐方式：多账号一行搞定（强烈建议用这个）
-          WNFLB_USERS: ${{ secrets.WNFLB_USERS }}   # 格式：user1:pass1|||user2:pass2
-
-          # 如果你只用单账号，可以用下面两个（随便选一种就行）
-          # WNFLB_USERNAME: ${{ secrets.WNFLB_USERNAME }}
-          # WNFLB_PASSWORD: ${{ secrets.WNFLB_PASSWORD }}
+          WNFLB_USERS: ${{ secrets.WNFLB_USERS }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           python fuliba.py
 
-      - name: 发送 Telegram 通知（可选）
+      - name: Telegram 通知
         if: always()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
