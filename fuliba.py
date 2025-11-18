@@ -9,7 +9,11 @@ import random
 
 # ==================== 代理设置（填你的 SOCKS5） ====================
 # 格式： username:password@ip:port   （没有账号密码就直接 ip:port）
-PROXY = "h1NvYV2Meh:oz54P2UCsG@74.48.144.51:28461"   # ← 你提供的这个
+import os
+PROXY = os.getenv("SOCKS5_PROXY", "")   # 格式：username:password@ip:port
+
+if not PROXY:
+    raise Exception("未设置 SOCKS5_PROXY 环境变量！去 Secrets 加一个")
 
 proxies = {
     "http":  f"socks5://{PROXY}",
