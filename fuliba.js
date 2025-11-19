@@ -66,8 +66,7 @@ async function signOne(cookie, index) {
       ({ data: html } = await http.get('/plugin.php?id=fx_checkin:list'));
       const newConti = (html.match(/已连续签到\D*(\d+)/) || [])[1] || contiDays;
 
-      const msg = `账号${index} 【${username}】\n` +
-                  `✅ 签到成功！\n` +
+      const msg = `✅ 签到成功！\n` +
                   `🏆 今日排名：第 <b>${todayRank}</b> 名\n` +
                   `🔥 连签：<b>${newConti}</b> 天（+1）\n` +
                   `📊 累计签到：<b>${totalDays}</b> 天\n` +
