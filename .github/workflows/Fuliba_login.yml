@@ -24,4 +24,4 @@ jobs:
           FULI_COOKIE: ${{ secrets.FULI_COOKIE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: node fulibasign.js
+        run: node fuliba.js
