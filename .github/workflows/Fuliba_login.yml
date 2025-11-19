@@ -1,115 +1,27 @@
-name: 福利吧签到 + TG通知
+name: 福利吧签到
 
 on:
   schedule:
-    - cron: '0 8 * * *'     # 每天北京时间 16:00 签到（UTC+8）
-  workflow_dispatch:        # 支持手动触发
+    - cron: '0 8 * * *'     # 北京时间 16:00
+  workflow_dispatch:
 
 jobs:
-  sign-and-notify:
+  sign:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: 福利吧签到 + Telegram 通知（单步完成）
+      - name: 安装 axios
+        run: npm install axios
+
+      - name: 执行签到（已内置 TG 通知）
         env:
-          FULI_COOKIE: ${{ secrets.FULI_COOKIE }}        # 多账号用 @ 分割
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # 私聊ID或群组ID（负数）
-        run: |
-          cat <<'EOF' > sign.js
-          const axios = require('axios');
-          
-          const cookies = (process.env.FULI_COOKIE || '').split('@').filter(Boolean);
-          const DOMAINS = [
-            "https://www.wnflb2025.com",
-            "https://www.wnflb2024.com",
-            "https://www.wnflb2023.com",
-            "https://www.wnflb99.com",
-            "https://www.wnflb.com",
-            "https://fuliba2025.bar",
-            "https://fuliba2024.net"
-          ];
-          
-          async function tgSend(text) {
-            if (!process.env.TG_BOT_TOKEN || !process.env.TG_CHAT_ID) return;
-            try {
-              await axios.post(`https://api.telegram.org/bot${process.env.TG_BOT_TOKEN}/sendMessage`, {
-                chat_id: process.env.TG_CHAT_ID,
-                text: text.slice(0,4090),
-                parse_mode: "HTML",
-                disable_web_page_preview: true
-              }, { timeout: 10000 });
-              console.log("TG推送成功 ✅");
-            } catch(e) { console.log("TG推送失败:", e.message); }
-          }
-          
-          async function sign(cookie) {
-            for (const base of DOMAINS) {
-              try {
-                const http = axios.create({
-                  baseURL: base,
-                  timeout: 15000,
-                  headers: {
-                    'Cookie': cookie.trim(),
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': base
-                  }
-                });
-          
-                let html = (await http.get('/plugin.php?id=fx_checkin:list')).data;
-                const formhash = (html.match(/name="formhash" value="(\w{8})"/) || [])[1]
-                              || (html.match(/formhash=(\w{8})/) || [])[1];
-                if (!formhash) throw 'formhash 失效或Cookie过期';
-          
-                await http.get(`/plugin.php?id=fx_checkin:checkin&formhash=${formhash}&inajax=1`);
-          
-                html = (await http.get('/plugin.php?id=fx_checkin:list')).data;
-                const conti = (html.match(/已连续签到\D*(\d+)/) || [])[1] || '?';
-                const total = (html.match(/累计签到\D*(\d+)/) || [])[1] || '?';
-          
-                return `✅ 签到成功！\n连续 <b>${conti}</b> 天\n累计 <b>${total}</b> 天\n域名：${base}`;
-              } catch (e) {
-                if (base === DOMAINS[DOMAINS.length-1]) 
-                  return `❌ 全挂了：${e.message || e}`;
-              }
-            }
-          }
-          
-          (async () => {
-            if (!cookies.length) {
-              await tgSend('⚠️ 福利吧签到失败：未配置 FULI_COOKIE');
-              process.exit(1);
-            }
-          
-            const results = [];
-            for (let i = 0; i < cookies.length; i++) {
-              console.log(`\n账号 ${i+1} 签到中...`);
-              results.push(await sign(cookies[i]));
-              await new Promise(r => setTimeout(r, 3000 + Math.random()*4000));
-            }
-          
-            const summary = `🔔 <b>福利吧签到报告</b>（${new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}）\n\n` 
-                          + results.map((r,i) => `账号${i+1}\n${r}`).join('\n\n');
-          
-            console.log(summary);
-            process.env.NOTIFY && await tgSend(summary);
-          })();
-          EOF
-          
-          # 执行
-          node sign.js && echo "NOTIFY=1" >> $GITHUB_ENV   # 成功后才发通知
-          
-      - name: 失败时也发Telegram通知（可选保险）
-        if: failure()
-        env:
+          FULI_COOKIE: ${{ secrets.FULI_COOKIE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: |
-          curl -s -X POST https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage \
-            -d chat_id=$TG_CHAT_ID \
-            -d text="⚠️ 福利吧签到脚本执行失败！请速查 GitHub Actions日志" \
-            -d parse_mode=HTML
+        run: node fulibasign.js
