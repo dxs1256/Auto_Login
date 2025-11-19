@@ -1,9 +1,9 @@
-name: 福利吧每日自动签到
+name: 福利吧每日签到
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # 即北京时间次日 00:00 每 6 小时整点运行一次
-  workflow_dispatch:
+    - cron: '0 8 * * *'     # 每天 UTC 0点 = 北京时间 16点签到，可改成 '30 22 * * *' 就是北京6:30
+  workflow_dispatch:        # 支持手动点 Run 触发
 
 jobs:
   sign:
@@ -11,20 +11,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 设置 Python
-        uses: actions/setup-python@v5
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: 20
 
-      - name: 安装依赖（必须！）
-        run: |
-          pip install requests urllib3 pysocks   # pysocks 支持 SOCKS5 代理
+      - name: 安装依赖
+        run: npm install axios got querystring
 
-      - name: 执行福利吧签到
+      - name: 运行福利吧签到（仅 Telegram 通知）
         env:
-          WNFLB_USERS: ${{ secrets.WNFLB_USERS }}
-          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
+          FULI_COOKIE: ${{ secrets.FULI_COOKIE }}        # 多账号用 @ 分割
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: |
-          python fuliba.py
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # 注意：很多教程写 TG_USER_ID，福利吧脚本里变量名是 TG_CHAT_ID 才认！
+        run: node fulibasign.js
