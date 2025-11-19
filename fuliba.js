@@ -11,8 +11,7 @@ const DOMAINS = [
   "https://www.wnflb2024.com",
   "https://www.wnflb2023.com",
   "https://www.wnflb99.com",
-  "https://www.wnflb.com",
-  "https://fuliba2025.bar",
+  "https://www.wnflb00.com",
   "https://fuliba2024.net"
 ];
 
