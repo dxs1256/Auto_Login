@@ -1,12 +1,20 @@
-# wispbyte_login.py —— 2025年 Telegram 通知增强版
+# wispbyte.py —— 2025年 北京时间版
 import os
 import requests
 import time
+from datetime import datetime, timedelta, timezone
+
+#以此确保获取到的是北京时间 (UTC+8)
+def get_beijing_time_str(fmt='%Y-%m-%d %H:%M:%S'):
+    utc_now = datetime.now(timezone.utc)
+    bj_now = utc_now + timedelta(hours=8)
+    return bj_now.strftime(fmt)
 
 def log(msg):
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
+    # 日志也显示北京时间，方便查看
+    cur_time = get_beijing_time_str('%H:%M:%S')
+    print(f"[{cur_time}] {msg}")
 
-# 新增：发送 Telegram 消息的函数
 def send_telegram(message):
     token = os.getenv("TG_BOT_TOKEN")
     chat_id = os.getenv("TG_CHAT_ID")
@@ -22,13 +30,10 @@ def send_telegram(message):
         "parse_mode": "Markdown"
     }
     try:
-        r = requests.post(url, json=payload, timeout=10)
-        if r.status_code == 200:
-            log("✅ Telegram 通知发送成功！")
-        else:
-            log(f"⚠️ Telegram 发送失败: {r.text}")
+        requests.post(url, json=payload, timeout=10)
+        log("✅ Telegram 通知已发送")
     except Exception as e:
-        log(f"⚠️ Telegram 请求异常: {e}")
+        log(f"⚠️ Telegram 发送失败: {e}")
 
 def keep_alive():
     cookie_str = os.getenv("WISPBYTE_COOKIE_STRING")
@@ -62,9 +67,12 @@ def keep_alive():
 
         # --- 成功判断逻辑 ---
         if "login" not in r.url and ("dashboard" in r.url or r.status_code == 200):
+            # 获取北京时间用于通知
+            bj_time_str = get_beijing_time_str()
+            
             msg = (
                 "✅ **Wispbyte 保活成功**\n\n"
-                f"📅 时间: `{time.strftime('%Y-%m-%d %H:%M:%S')}`\n"
+                f"📅 时间: `{bj_time_str} (北京时间)`\n"
                 f"🔗 状态: 已进入 Dashboard\n"
                 f"🍪 Cookie: 有效续期中"
             )
