@@ -2,7 +2,7 @@ name: Wispbyte 保活 (Cookie版)
 
 on:
   schedule:
-    - cron: '0 2 * * *'      # 每天运行一次即可，无需太频繁
+    - cron: '0 2 * * *'      # 每天运行一次
   workflow_dispatch:
 
 jobs:
@@ -19,11 +19,13 @@ jobs:
           python-version: '3.10'
 
       - name: 安装依赖
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          # 下面这行是修复报错的关键：同时安装 requests 和 pysocks
+          pip install requests pysocks
 
       - name: 执行保活
         env:
-          # 只需要 Cookie 和 代理
           WISPBYTE_COOKIE_STRING: ${{ secrets.WISPBYTE_COOKIE_STRING }}
           SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
         run: python wispbyte_login.py
@@ -36,4 +38,4 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
-            -d text="⚠️ Wispbyte 保活失败！Cookie 可能已过期，请手动更新 Secrets。"
+            -d text="⚠️ Wispbyte 保活失败！请检查 GitHub Actions 日志。"
