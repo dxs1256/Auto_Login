@@ -10,7 +10,7 @@ const DOMAINS = [
   "https://www.wnflb2024.com",
   "https://www.wnflb2023.com",
   "https://www.wnflb99.com",
-  "https://www.wnflb.com",
+  "https://www.wnflb00.com",
   "https://fuliba2025.bar"
 ];
 
@@ -92,8 +92,7 @@ async function signOne(cookie, index) {
       const after = getInfo(html);
 
       // 以签到后的数据为准，防止漏掉+1
-      const msg = `✅ 第${index}个账号签到成功\n` +
-                  `👤 用户：${after.username}\n` +
+      const msg = `✅ 签到成功\n` +
                   `🏆 今日排名：第 <b>${after.todayRank}</b> 名\n` +
                   `🔥 连签天数：<b>${after.contiDays}</b> 天\n` +
                   `📊 累计签到：<b>${after.totalDays}</b> 天\n` +
