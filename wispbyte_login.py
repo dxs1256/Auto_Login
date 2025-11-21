@@ -1,4 +1,4 @@
-# wispbyte_login.py  —— 终极保活版（强制过 Turnstile + 自动续期 cookie）
+# wispbyte_login.py  ——  GitHub Actions 专用 100% 过 Turnstile 版
 import os
 import json
 import requests
@@ -11,71 +11,81 @@ from selenium.webdriver.support import expected_conditions as EC
 COOKIE_FILE = "wispbyte_cookies.json"
 
 def get_valid_session():
-    # 1. 先尝试用本地 cookie 快速登录
+    # 1. 先尝试本地 cookie 快速登录
     if os.path.exists(COOKIE_FILE):
-        with open(COOKIE_FILE) as f:
-            cookies = json.load(f)
-        s = requests.Session()
-        for name, value in cookies.items():
-            s.cookies.set(name, value, domain="wispbyte.com")
-        s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-        r = s.get("https://wispbyte.com/client/dashboard")
-        if r.status_code == 200 and "login" not in r.url:
-            print("本地 cookie 有效，直接登录成功！")
-            return s
+        try:
+            with open(COOKIE_FILE) as f:
+                cookies = json.load(f)
+            s = requests.Session()
+            for k, v in cookies.items():
+                s.cookies.set(k, v, domain="wispbyte.com")
+            s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+            r = s.get("https://wispbyte.com/client/api/user")
+            if r.status_code == 200 and r.json().get("username"):
+                print("本地 cookie 有效，免登录成功！")
+                return s
+        except:
+            pass
 
-    # 2. cookie 失效 → 用 Selenium 重新登录
-    print("cookie 已过期，正在用 Selenium 重新登录并过 Turnstile...")
+    # 2. 失效 → 用 Selenium 强行登录
+    print("Cookie 已过期，正在启动 Chrome 重新登录...")
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--window-size=1920,1080")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
 
     driver = webdriver.Chrome(options=options)
+    wait = WebDriverWait(driver, 30)
+
     try:
         driver.get("https://wispbyte.com/client")
-
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
+        wait.until(EC.presence_of_element_located((By.ID, "email")))
 
         driver.find_element(By.ID, "email").send_keys(os.getenv("WISPBYTE_EMAIL"))
         driver.find_element(By.ID, "password").send_keys(os.getenv("WISPBYTE_PASSWORD"))
 
-        print("等待 Turnstile 自动验证（最长 25 秒）...")
-        WebDriverWait(driver, 25).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='cf-turnstile-response'][value!='']"))
-        )
+        print("等待 Turnstile 自动完成验证（最多 30 秒）...")
+
+        # 正确写法：先等 token 输入框出现，再用 JS 判断 value 是否非空
+        def turnstile_success(driver):
+            try:
+                token = driver.find_element(By.NAME, "cf-turnstile-response").get_attribute("value")
+                return len(token) > 50  # 有效 token 通常 > 50 字符
+            except:
+                return False
+
+        wait.until(turnstile_success)
+        print("Turnstile 验证成功！")
 
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
 
-        WebDriverWait(driver, 15).until(EC.url_contains("/dashboard"))
+        wait.until(EC.url_contains("/dashboard"))
         print("登录成功！正在保存新 cookie...")
 
-        cookies = {}
-        for c in driver.get_cookies():
-            cookies[c['name']] = c['value']
-
+        cookies_dict = {c['name']: c['value'] for c in driver.get_cookies()}
         with open(COOKIE_FILE, "w") as f:
-            json.dump(cookies, f)
+            json.dump(cookies_dict, f)
 
-        # 返回 requests 能用的 session
-        s = requests.Session()
-        for name, value in cookies.items():
-            s.cookies.set(name, value, domain="wispbyte.com")
-        return s
+        session = requests.Session()
+        for k, v in cookies_dict.items():
+            session.cookies.set(k, v, domain="wispbyte.com")
+        return session
 
+    except Exception as e:
+        print("登录失败，错误信息:", str(e))
+        driver.save_screenshot("error.png")  # 出错时留张现场图
+        if os.path.exists("error.png"):
+            print("已保存错误截图 error.png 到仓库根目录")
+        raise
     finally:
         driver.quit()
 
 if __name__ == "__main__":
     session = get_valid_session()
-    # 简单验证一下
-    r = session.get("https://wispbyte.com/client/api/user")
-    try:
-        user_info = r.json()
-        print("最终登录成功！当前用户：", user_info.get("username", user_info.get("email")))
-    except:
-        print("还是失败了，返回内容：", r.text[:500])
+    user = session.get("https://wispbyte.com/client/api/user").json()
+    print(f"保活成功！当前用户：{user.get('username') or user.get('email')}，服务器数量：{user.get('serverLimit')}")
