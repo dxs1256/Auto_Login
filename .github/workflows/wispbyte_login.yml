@@ -1,28 +1,51 @@
-name: Wispbyte 永久保活
+name: Wispbyte 永久保活（配合 wispbyte_login.py）
 
 on:
   schedule:
-    - cron: '0 */4 * * *'   # 每 4 小时一次，彻底杜绝过期
-  workflow_dispatch:
+    - cron: '0 */4 * * *'      # 每 4 小时自动登录一次，彻底防掉线
+  workflow_dispatch:           # 支持手动点 Run 触发
+  push:
+    branches: [ main, master ] # 每次 push 代码也顺便跑一次，方便调试
 
 jobs:
-  login:
+  keep-alive:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 15
 
-      - name: Set up Python & Chrome
+    steps:
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: 安装 Chromium（解决 Turnstile 检测）
         run: |
-          sudo apt update && sudo apt install -y chromium-browser
-          pip install selenium requests
+          sudo apt update -y
+          sudo apt install -y chromium-browser libgbm1 libasound2 fonts-liberation
 
-      - name: Run Wispbyte 保活
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium requests beautifulsoup4
+
+      - name: 执行 wispbyte_login.py 自动登录保活
         env:
-          WISPBYTE_EMAIL: ${{ secrets.WISPBYTE_EMAIL }}
-          WISPBYTE_PASSWORD: ${{ secrets.WISPBYTE_PASSWORD }}
-        run: python wispbyte_login.py
+          WISPBYTE_EMAIL: ${{ secrets.WISPBYTE_EMAIL }}       # 你的登录邮箱或用户名
+          WISPBYTE_PASSWORD: ${{ secrets.WISPBYTE_PASSWORD }} # 你的密码
+        run: |
+          python wispbyte_login.py
+
+      # 可选：失败时 Telegram 报警
+      - name: Telegram 报警（登录失败时）
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            -d parse_mode="HTML" \
+            -d text="<b>⚠️ Wispbyte 保活失败！</b>%0A时间：$(date '+%Y-%m-%d %H:%M:%S')%0A请检查账号或密码是否被改！"
