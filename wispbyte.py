@@ -1,7 +1,8 @@
-# wispbyte.py —— 2025年 多账号+北京时间+完整修复版
+# wispbyte.py —— 2025年 用户名提取增强版
 import os
 import requests
 import time
+import re  # 引入正则模块用于提取用户名
 from datetime import datetime, timedelta, timezone
 
 # 获取北京时间
@@ -12,7 +13,6 @@ def get_beijing_time_str(fmt='%Y-%m-%d %H:%M:%S'):
 
 def log(msg):
     cur_time = get_beijing_time_str('%H:%M:%S')
-    # flush=True 确保日志在 GitHub Actions 实时显示
     print(f"[{cur_time}] {msg}", flush=True)
 
 def send_telegram(message):
@@ -27,7 +27,7 @@ def send_telegram(message):
     payload = {
         "chat_id": chat_id,
         "text": message,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML", # 改为 HTML 模式以支持加粗等格式
         "disable_web_page_preview": True
     }
     try:
@@ -55,26 +55,35 @@ def check_one_account(index, cookie):
 
     try:
         log(f"正在检查第 {index} 个账号...")
-        # 访问主页检测跳转
         r = s.get("https://wispbyte.com/client", timeout=20, allow_redirects=True)
         
-        # 成功判断：停留在 dashboard 或者 状态码 200 且没跳回 login
+        # 成功判断
         if "login" not in r.url and ("dashboard" in r.url or r.status_code == 200):
-            log(f"✅ 账号 {index} 保活成功")
-            return f"✅ 账号 {index}: 保活成功 (Dashboard)"
+            # --- 新增：提取用户名逻辑 ---
+            username = "未知用户"
+            try:
+                # 正则匹配 <div class="username">orrzzz</div>
+                # \s* 处理可能的空格
+                match = re.search(r'<div class="username">\s*([^<]+)\s*</div>', r.text)
+                if match:
+                    username = match.group(1).strip()
+            except Exception as e:
+                log(f"提取用户名失败: {e}")
+
+            log(f"✅ 账号 {index} ({username}) 保活成功")
+            return f"✅ 账号 {index}：<b>{username}</b> (正常)"
+            
         elif "login" in r.url:
             log(f"❌ 账号 {index} Cookie 失效")
-            return f"❌ 账号 {index}: Cookie 失效 (需更新)"
+            return f"❌ 账号 {index}：Cookie 已失效"
         else:
-            return f"⚠️ 账号 {index}: 未知状态 ({r.status_code})"
+            return f"⚠️ 账号 {index}：状态未知 ({r.status_code})"
             
     except Exception as e:
         log(f"❌ 账号 {index} 发生异常: {e}")
-        return f"❌ 账号 {index}: 运行出错"
+        return f"❌ 账号 {index}：运行出错"
 
 def run_all():
-    # 1. 获取并分割 Cookie
-    # 这里使用 '&' 作为分隔符
     raw_cookies = os.getenv("WISPBYTE_COOKIE_STRING", "")
     if not raw_cookies:
         log("❌ 错误：未设置 WISPBYTE_COOKIE_STRING")
@@ -85,21 +94,18 @@ def run_all():
 
     results = []
     
-    # 2. 循环执行 (你之前的代码就是缺了这一大段！)
     for i, cookie in enumerate(cookie_list):
         res = check_one_account(i + 1, cookie)
         results.append(res)
-        # 稍微暂停一下，防止并发太快
         if i < len(cookie_list) - 1:
             time.sleep(3)
 
-    # 3. 汇总发送通知
     bj_time = get_beijing_time_str()
     summary = "\n".join(results)
     
     tg_msg = (
-        f"🖥 **Wispbyte 保活报告**\n"
-        f"📅 时间: `{bj_time}`\n"
+        f"🖥 <b>Wispbyte 保活报告</b>\n"
+        f"📅 时间：{bj_time}\n"
         f"------------------\n"
         f"{summary}"
     )
