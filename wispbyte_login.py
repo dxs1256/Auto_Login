@@ -89,3 +89,17 @@ if __name__ == "__main__":
     session = get_valid_session()
     user = session.get("https://wispbyte.com/client/api/user").json()
     print(f"保活成功！当前用户：{user.get('username') or user.get('email')}，服务器数量：{user.get('serverLimit')}")
+
+    # ============ 保活增强：在登录成功后访问几个页面，模拟真人操作 ============
+    print("正在模拟真人操作，防止被检测不活跃...")
+    session.get("https://wispbyte.com/client/dashboard")
+    time.sleep(2)
+    session.get("https://wispbyte.com/client/servers")
+    time.sleep(2)
+    # 如果你想一键重启所有服务器，在这里加：
+    # servers = session.get("https://wispbyte.com/client/api/servers").json()
+    # for srv in servers:
+    #     if srv.get('status') != 'running':
+    #         session.post(f"https://wispbyte.com/client/api/servers/{srv['id']}/start")
+    #         print(f"已启动服务器: {srv['name']}")
+    # =========================================================================
