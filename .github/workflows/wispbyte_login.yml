@@ -4,8 +4,6 @@ on:
   schedule:
     - cron: '0 */4 * * *'      # 每4小时一次
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 jobs:
   keep-alive:
@@ -38,6 +36,7 @@ jobs:
         env:
           WISPBYTE_EMAIL: ${{ secrets.WISPBYTE_EMAIL }}
           WISPBYTE_PASSWORD: ${{ secrets.WISPBYTE_PASSWORD }}
+          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}   # <--- 重点加这一行
         run: |
           python wispbyte_login.py
 
