@@ -31,7 +31,7 @@ jobs:
           SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}   # <--- 新增这行
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}       # <--- 新增这行
-        run: python wispbyte.py
+        run: python -u wispbyte.py
 
       - name: Telegram 报警
         if: failure()
