@@ -22,10 +22,10 @@ jobs:
           python-version: '3.12'
 
       # 关键修复：Ubuntu 24.04 兼容的 Chromium 安装方式
-      - name: 安装 Chromium 和正确依赖（Ubuntu 24.04 专用）
+      - name: 安装 Chromium（解决 Turnstile 检测）
         run: |
           sudo apt update -y
-          sudo apt install -y chromium-browser libasound2t64 libgbm1 libnss3 libxss1 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 fonts-liberation
+          sudo apt install -y chromium-browser libasound2t64 libgbm1 fonts-liberation
 
       # 安装 Python 依赖
       - name: 安装 Python 包
