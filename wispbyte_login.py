@@ -48,17 +48,16 @@ def get_valid_session():
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    # 强制 Selenium 走 SOCKS5 代理（关键！）
+    # 强制 Selenium 走 SOCKS5 代理（兼容 Selenium 4.11+）
     proxy = Proxy()
     proxy.proxy_type = ProxyType.MANUAL
     proxy.socks_proxy = proxy_url
     proxy.socks_version = 5
 
-    capabilities = webdriver.DesiredCapabilities.CHROME
-    proxy.add_to_capabilities(capabilities)
+    capabilities = webdriver.DesiredCapabilities.CHROME.copy()
+    proxy.to_capabilities(capabilities)
 
     driver = webdriver.Chrome(options=options, desired_capabilities=capabilities)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => false});")
 
     wait = WebDriverWait(driver, 80)
 
