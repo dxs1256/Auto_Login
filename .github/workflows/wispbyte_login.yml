@@ -26,8 +26,11 @@ jobs:
 
       - name: 执行保活
         env:
+          # 必须在这里把 Secrets 映射给 Python 环境变量
           WISPBYTE_COOKIE_STRING: ${{ secrets.WISPBYTE_COOKIE_STRING }}
           SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}   # <--- 新增这行
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}       # <--- 新增这行
         run: python wispbyte_login.py
 
       - name: Telegram 报警
