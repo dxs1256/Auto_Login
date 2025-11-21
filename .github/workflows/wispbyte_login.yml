@@ -1,51 +1,28 @@
-name: Wispbyte 保活脚本（每天自动登录）
+name: Wispbyte 永久保活
 
-# 触发条件：每天 UTC 时间 02:00 和 14:00 执行两次（相当于北京时间 10:00 和 22:00）
-# 你也可以改成 hourly（每小时一次）或者 push 时触发
 on:
   schedule:
-    - cron: '0 2,14 * * *'   # 每天两次
-  workflow_dispatch:         # 允许手动触发
+    - cron: '0 */4 * * *'   # 每 4 小时一次，彻底杜绝过期
+  workflow_dispatch:
 
 jobs:
-  keep-alive:
+  login:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取代码
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2. 设置 Python 环境
-      - name: Set up Python
+      - name: Set up Python & Chrome
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # 3. 安装依赖
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install requests beautifulsoup4
+          sudo apt update && sudo apt install -y chromium-browser
+          pip install selenium requests
 
-      # 4. 把你的账号密码安全地注入环境变量（强烈推荐用 Secrets，不要明文写在脚本里！）
-      - name: Run Wispbyte 登录保活脚本
+      - name: Run Wispbyte 保活
         env:
-          WISPBYTE_EMAIL: ${{ secrets.WISPBYTE_EMAIL }}       # 你的邮箱或用户名
-          WISPBYTE_PASSWORD: ${{ secrets.WISPBYTE_PASSWORD }} # 你的密码
-        run: |
-          # 动态替换脚本里的占位符（更安全的方式）
-          sed -i "s/你的邮箱或用户名/$WISPBYTE_EMAIL/g" wispbyte_login.py
-          sed -i "s/你的密码/$WISPBYTE_PASSWORD/g" wispbyte_login.py
-          
-          python wispbyte_login.py
-
-      # 5. （可选）登录失败时发 Telegram / Discord / 邮箱通知
-      - name: 登录失败报警（Telegram 示例）
-        if: failure()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-            -d chat_id="$TELEGRAM_CHAT_ID" \
-            -d text="⚠️ Wispbyte 保活失败！请立刻检查账号是否被封或密码已改！%0A时间：$(date)"
+          WISPBYTE_EMAIL: ${{ secrets.WISPBYTE_EMAIL }}
+          WISPBYTE_PASSWORD: ${{ secrets.WISPBYTE_PASSWORD }}
+        run: python wispbyte_login.py
