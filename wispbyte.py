@@ -1,4 +1,4 @@
-# wispbyte.py —— 2025年 多账号+北京时间版
+# wispbyte.py —— 2025年 多账号+北京时间+完整修复版
 import os
 import requests
 import time
@@ -12,7 +12,8 @@ def get_beijing_time_str(fmt='%Y-%m-%d %H:%M:%S'):
 
 def log(msg):
     cur_time = get_beijing_time_str('%H:%M:%S')
-    print(f"[{cur_time}] {msg}")
+    # flush=True 确保日志在 GitHub Actions 实时显示
+    print(f"[{cur_time}] {msg}", flush=True)
 
 def send_telegram(message):
     token = os.getenv("TG_BOT_TOKEN")
@@ -73,7 +74,7 @@ def check_one_account(index, cookie):
 
 def run_all():
     # 1. 获取并分割 Cookie
-    # 这里使用 '&' 作为分隔符，因为 Wispbyte 的 Cookie 比较长，用 & 比较清晰
+    # 这里使用 '&' 作为分隔符
     raw_cookies = os.getenv("WISPBYTE_COOKIE_STRING", "")
     if not raw_cookies:
         log("❌ 错误：未设置 WISPBYTE_COOKIE_STRING")
@@ -83,3 +84,27 @@ def run_all():
     log(f"共检测到 {len(cookie_list)} 个账号")
 
     results = []
+    
+    # 2. 循环执行 (你之前的代码就是缺了这一大段！)
+    for i, cookie in enumerate(cookie_list):
+        res = check_one_account(i + 1, cookie)
+        results.append(res)
+        # 稍微暂停一下，防止并发太快
+        if i < len(cookie_list) - 1:
+            time.sleep(3)
+
+    # 3. 汇总发送通知
+    bj_time = get_beijing_time_str()
+    summary = "\n".join(results)
+    
+    tg_msg = (
+        f"🖥 **Wispbyte 保活报告**\n"
+        f"📅 时间: `{bj_time}`\n"
+        f"------------------\n"
+        f"{summary}"
+    )
+    
+    send_telegram(tg_msg)
+
+if __name__ == "__main__":
+    run_all()
