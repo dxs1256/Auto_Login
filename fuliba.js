@@ -1,4 +1,4 @@
-// fuliba.js —— 完整信息提取版（支持已签到/未签到，全部域名稳定，支持 TG + 企业微信）
+// fuliba.js —— 完整信息提取版（支持已签到/未签到，全部域名稳定，支持 TG + PushPlus）
 const axios = require('axios');
 
 const cookies = (process.env.FULI_COOKIE || '').split('@').filter(Boolean);
@@ -7,9 +7,9 @@ const cookies = (process.env.FULI_COOKIE || '').split('@').filter(Boolean);
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-// 企业微信 Webhook 配置
-// 优先读取环境变量，如果没有则使用你提供的默认 Key
-const QYWX_KEY = process.env.QYWX_KEY || '63e67fd2-c188-4ad2-b74d-6067d67aa0fd';
+// PushPlus 配置 (http://www.pushplus.plus/)
+// 优先读取环境变量，或者直接在这里填入你的 Token
+const PUSHPLUS_TOKEN = process.env.PUSHPLUS_TOKEN || ''; 
 
 const DOMAINS = [
   "https://www.wnflb2025.com",
@@ -36,26 +36,22 @@ async function sendTG(title, content) {
   }
 }
 
-// 企业微信 Webhook 推送
-async function sendWeChat(title, content) {
-  if (!QYWX_KEY) return console.log("企业微信 Key 缺失，跳过推送");
+// PushPlus 推送
+async function sendPushPlus(title, content) {
+  if (!PUSHPLUS_TOKEN) return console.log("PushPlus Token 缺失，跳过推送");
   try {
-    // 将 HTML 格式简单转换为 Markdown 以适配企业微信
-    // 1. 去除 b 标签，改为 markdown 加粗
-    let mdContent = content.replace(/<b>/g, '**').replace(/<\/b>/g, '**');
+    // 将换行符转换为 <br> 以适配 HTML 模板
+    const htmlContent = content.replace(/\n/g, '<br>');
     
-    // 拼装完整消息
-    const fullMsg = `## ${title}\n\n${mdContent}`;
-
-    await axios.post(`https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${QYWX_KEY}`, {
-      msgtype: "markdown",
-      markdown: {
-        content: fullMsg
-      }
+    await axios.post('http://www.pushplus.plus/send', {
+      token: PUSHPLUS_TOKEN,
+      title: title,
+      content: htmlContent,
+      template: 'html'
     }, { timeout: 10000 });
-    console.log("企业微信推送成功 🎉");
+    console.log("PushPlus 推送成功 🎉");
   } catch (e) {
-    console.log("企业微信推送失败:", e.response?.data || e.message);
+    console.log("PushPlus 推送失败:", e.response?.data || e.message);
   }
 }
 
@@ -149,8 +145,11 @@ async function signOne(cookie, index) {
   if (cookies.length === 0) {
     const errMsg = '未检测到 FULI_COOKIE 环境变量';
     console.log(errMsg);
-    await sendTG('福利吧签到失败', errMsg);
-    await sendWeChat('福利吧签到失败', errMsg);
+    // 尝试报错推送
+    await Promise.all([
+      sendTG('福利吧签到失败', errMsg),
+      sendPushPlus('福利吧签到失败', errMsg)
+    ]);
     process.exit(1);
   }
 
@@ -173,6 +172,6 @@ async function signOne(cookie, index) {
   // 并行推送
   await Promise.all([
     sendTG(title, summary),
-    sendWeChat(title, summary)
+    sendPushPlus(title, summary)
   ]);
 })();
