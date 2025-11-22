@@ -28,4 +28,5 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }} # 从 GitHub Secrets 中获取
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}      # 从 GitHub Secrets 中获取
           NETLIB_ACCOUNTS: ${{ secrets.NETLIB_ACCOUNTS }}  # 从 GitHub Secrets 中获取
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # 👈 必须加上这一行
         run: npm start
