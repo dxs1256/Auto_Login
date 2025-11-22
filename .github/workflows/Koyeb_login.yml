@@ -27,6 +27,7 @@ jobs:
         KOYEB_ACCOUNTS: ${{ secrets.KOYEB_ACCOUNTS }}
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # 👈 必须加上这一行
       run: python koyeb.py
       
   keepalive-workflow:
