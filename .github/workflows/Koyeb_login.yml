@@ -2,7 +2,7 @@ name: Koyeb自动登录
 
 on:
   schedule:
-    - cron: '0 20 * * 6'  # 每周六 20:00 执行
+    - cron: '0 16 * * 6'  # 每周六 20:00 执行
   workflow_dispatch:
 jobs:
   login:
