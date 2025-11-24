@@ -2,7 +2,7 @@ name: Wispbyte 保活
 
 on:
   schedule:
-    - cron: '0 16 * * *'      # 每天运行一次
+    - cron: '0 16 * * 6'  # 每周六 20:00 执行
   workflow_dispatch:
 
 jobs:
