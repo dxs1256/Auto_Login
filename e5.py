@@ -6,13 +6,13 @@ from datetime import datetime, timezone, timedelta
 # ================= 配置多账号 =================
 ACCOUNTS = [
     {
-        "name": "situ@mesitu",
+        "name": "账号 A (主号)",
         "tenant_id": os.getenv('TENANT_ID'),
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET')
     },
     {
-        "name": "orrz@x7pt5",
+        "name": "账号 B (小号)",
         "tenant_id": os.getenv('TENANT_ID_2'),
         "client_id": os.getenv('CLIENT_ID_2'),
         "client_secret": os.getenv('CLIENT_SECRET_2')
@@ -153,9 +153,13 @@ if __name__ == "__main__":
     print("🚀 开始执行多账号监控...")
     
     full_report = []
-    # 标题加粗，使用北京时间
-    full_report.append(f"**📋 Office 365 监控日报**")
-    full_report.append(f"📅 北京时间: {get_beijing_time()}\n")
+    
+    # 【修改重点】这里使用了多行 append 配合空字符串，
+    # 确保在 Markdown 中产生真正的换行，避免挤在一起。
+    full_report.append("**📋 Office 365 监控日报**")
+    full_report.append("") # 这是一个空行，用于强制换行
+    full_report.append(f"📅 北京时间: {get_beijing_time()}")
+    full_report.append("---") # 分割线
     
     for acc in ACCOUNTS:
         if not acc['tenant_id']:
@@ -169,7 +173,10 @@ if __name__ == "__main__":
             sub_info = get_sub_status(token, acc['name'])
             full_report.append(sub_info)
         else:
-            full_report.append(f"**👤 {acc['name']}**\n❌ 获取 Token 失败，请检查 Secret 配置\n---")
+            # 错误信息也优化一下排版
+            full_report.append(f"**👤 {acc['name']}**")
+            full_report.append("❌ 获取 Token 失败，请检查 Secret 配置")
+            full_report.append("---")
 
     # 合并发送
     final_content = "\n".join(full_report)
