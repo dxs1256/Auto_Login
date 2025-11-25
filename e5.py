@@ -79,8 +79,8 @@ def get_sub_status(token, account_name):
     }
 
     msg_lines = []
-    # 账号名称 (加粗)
-    msg_lines.append(f"**👤 {account_name}**") 
+    # 这里使用普通文本，不加粗
+    msg_lines.append(f"👤 {account_name}") 
     
     try:
         response = requests.get(url, headers=headers)
@@ -154,12 +154,12 @@ if __name__ == "__main__":
     
     full_report = []
     
-    # 【修改重点】这里使用了多行 append 配合空字符串，
-    # 确保在 Markdown 中产生真正的换行，避免挤在一起。
-    full_report.append("**📋 Office 365 监控日报**")
-    full_report.append("") # 这是一个空行，用于强制换行
+    # 【修改重点】全部使用普通文本，利用空行分割
+    full_report.append("📋 Office 365 监控日报")
+    full_report.append("") # 这是一个空行，确保标题和时间不在同一行
     full_report.append(f"📅 北京时间: {get_beijing_time()}")
-    full_report.append("---") # 分割线
+    full_report.append("") # 这是一个空行，确保时间与分割线分开
+    full_report.append("---")
     
     for acc in ACCOUNTS:
         if not acc['tenant_id']:
@@ -173,8 +173,7 @@ if __name__ == "__main__":
             sub_info = get_sub_status(token, acc['name'])
             full_report.append(sub_info)
         else:
-            # 错误信息也优化一下排版
-            full_report.append(f"**👤 {acc['name']}**")
+            full_report.append(f"👤 {acc['name']}")
             full_report.append("❌ 获取 Token 失败，请检查 Secret 配置")
             full_report.append("---")
 
