@@ -3,7 +3,7 @@ name: E5 Auto Renew
 on:
   workflow_dispatch:
   schedule:
-        - cron: '0 16 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
+    - cron: '0 16 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
 
 jobs:
   check-and-notify:
