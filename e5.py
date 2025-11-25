@@ -1,20 +1,18 @@
 import requests
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # ================= 配置多账号 =================
-# 我们将账号信息整理成一个列表。
-# 如果你有第三个账号，仿照格式添加在后面即可。
 ACCOUNTS = [
     {
-        "name": "Situ (situ@mesitu.onmicrosoft.com)",
+        "name": "situ@mesitu",
         "tenant_id": os.getenv('TENANT_ID'),
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET')
     },
     {
-        "name": "Orrz (orrz@x7pt5.onmicrosoft.com)",
+        "name": "orrz@x7pt5",
         "tenant_id": os.getenv('TENANT_ID_2'),
         "client_id": os.getenv('CLIENT_ID_2'),
         "client_secret": os.getenv('CLIENT_SECRET_2')
@@ -24,6 +22,12 @@ ACCOUNTS = [
 PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN')
 
 # ================= 辅助函数 =================
+
+def get_beijing_time():
+    """获取北京时间字符串"""
+    utc_dt = datetime.now(timezone.utc)
+    bj_dt = utc_dt.astimezone(timezone(timedelta(hours=8)))
+    return bj_dt.strftime('%Y-%m-%d %H:%M:%S')
 
 def get_access_token(tenant_id, client_id, client_secret):
     """获取 Token"""
@@ -51,7 +55,7 @@ def get_access_token(tenant_id, client_id, client_secret):
         return None
 
 def get_sub_status(token, account_name):
-    """查询单个账号的状态，返回文本片段"""
+    """查询单个账号的状态"""
     url = "https://graph.microsoft.com/v1.0/subscribedSkus"
     headers = {'Authorization': f'Bearer {token}'}
     
@@ -75,7 +79,8 @@ def get_sub_status(token, account_name):
     }
 
     msg_lines = []
-    msg_lines.append(f"### 👤 {account_name}") # 子标题
+    # 账号名称 (加粗)
+    msg_lines.append(f"**👤 {account_name}**") 
     
     try:
         response = requests.get(url, headers=headers)
@@ -101,7 +106,6 @@ def get_sub_status(token, account_name):
                 prepaid = sub.get('prepaidUnits', {})
                 enabled_count = prepaid.get('enabled', 0)
                 warning_count = prepaid.get('warning', 0)
-                suspended_count = prepaid.get('suspended', 0)
 
                 # 汉化
                 cn_name = sku_mapping.get(raw_sku, raw_sku)
@@ -112,7 +116,7 @@ def get_sub_status(token, account_name):
                 if raw_status == "Warning": icon = "⏰"
                 if raw_status == "Suspended": icon = "❌"
 
-                msg_lines.append(f"- **{cn_name}**")
+                msg_lines.append(f"- {cn_name}")
                 msg_lines.append(f"  - 状态: {icon} {cn_status}")
                 msg_lines.append(f"  - 许可: {enabled_count}")
                 
@@ -134,7 +138,7 @@ def send_pushplus(content):
     url = 'http://www.pushplus.plus/send'
     data = {
         "token": PUSHPLUS_TOKEN,
-        "title": "Office 365 多账号监控日报",
+        "title": "Office 365 监控日报",
         "content": content,
         "template": "markdown"
     }
@@ -149,11 +153,11 @@ if __name__ == "__main__":
     print("🚀 开始执行多账号监控...")
     
     full_report = []
-    full_report.append(f"## 📋 Office 365 监控日报")
-    full_report.append(f"📅 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    # 标题加粗，使用北京时间
+    full_report.append(f"**📋 Office 365 监控日报**")
+    full_report.append(f"📅 北京时间: {get_beijing_time()}\n")
     
     for acc in ACCOUNTS:
-        # 检查配置是否完整，如果有账号没配Secret就跳过
         if not acc['tenant_id']:
             print(f"⚠️ 跳过 {acc['name']}：未配置环境变量")
             continue
@@ -165,9 +169,9 @@ if __name__ == "__main__":
             sub_info = get_sub_status(token, acc['name'])
             full_report.append(sub_info)
         else:
-            full_report.append(f"### 👤 {acc['name']}\n❌ 获取 Token 失败，请检查 Secret 配置\n---")
+            full_report.append(f"**👤 {acc['name']}**\n❌ 获取 Token 失败，请检查 Secret 配置\n---")
 
     # 合并发送
     final_content = "\n".join(full_report)
-    print(final_content) # 在日志里也打印一份
+    print(final_content)
     send_pushplus(final_content)
