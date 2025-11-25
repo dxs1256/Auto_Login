@@ -1,9 +1,9 @@
 name: E5 Auto Renew & Monitor
 
 on:
-  workflow_dispatch: # 允许手动点击按钮运行
+  workflow_dispatch:
   schedule:
-    # 每天 UTC 1:00 运行 (对应北京时间 9:00)
+    # 每天北京时间 9:00 (UTC 1:00) 运行
     - cron: '0 1 * * *'
 
 jobs:
@@ -26,9 +26,17 @@ jobs:
 
       - name: Run E5 Check Script
         env:
-          # 将 GitHub Secrets 映射到 Python 环境变量
+          # === 账号 1 (主号) ===
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          
+          # === 账号 2 (新增的小号) ===
+          # 左边是 Python 里的变量名，右边是 GitHub 设置里的 Secret 名
+          TENANT_ID_2: ${{ secrets.TENANT_ID_2 }}
+          CLIENT_ID_2: ${{ secrets.CLIENT_ID_2 }}
+          CLIENT_SECRET_2: ${{ secrets.CLIENT_SECRET_2 }}
+          
+          # === 推送配置 ===
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python e5.py
