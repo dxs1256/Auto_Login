@@ -6,13 +6,13 @@ from datetime import datetime, timezone, timedelta
 # ================= 配置多账号 =================
 ACCOUNTS = [
     {
-        "name": "账号 A (主号)",
+        "name": "situ@mesitu",
         "tenant_id": os.getenv('TENANT_ID'),
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET')
     },
     {
-        "name": "账号 B (小号)",
+        "name": "orrz@x7pt5",
         "tenant_id": os.getenv('TENANT_ID_2'),
         "client_id": os.getenv('CLIENT_ID_2'),
         "client_secret": os.getenv('CLIENT_SECRET_2')
