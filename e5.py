@@ -8,13 +8,13 @@ from datetime import datetime
 # 如果你有第三个账号，仿照格式添加在后面即可。
 ACCOUNTS = [
     {
-        "name": "situ (situ@mesitu.onmicrosoft.com)",
+        "name": "账号 A (主号)",
         "tenant_id": os.getenv('TENANT_ID'),
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET')
     },
     {
-        "name": "orrz (orrz@x7pt5.onmicrosoft.com)",
+        "name": "账号 B (小号)",
         "tenant_id": os.getenv('TENANT_ID_2'),
         "client_id": os.getenv('CLIENT_ID_2'),
         "client_secret": os.getenv('CLIENT_SECRET_2')
