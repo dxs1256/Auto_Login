@@ -10,9 +10,13 @@ CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN')
 
 def get_access_token():
-    """获取微软 Graph API 的访问令牌"""
+    """获取微软 Graph API 的访问令牌 (Client Credentials Flow)"""
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    
     data = {
         'client_id': CLIENT_ID,
         'scope': 'https://graph.microsoft.com/.default',
@@ -31,7 +35,9 @@ def get_access_token():
 def get_sub_status(token):
     """查询订阅状态并返回格式化消息"""
     url = "https://graph.microsoft.com/v1.0/subscribedSkus"
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
     
     msg_lines = []
     
@@ -41,44 +47,53 @@ def get_sub_status(token):
             return f"❌ API 请求失败: {response.status_code}\n{response.text}"
 
         data = response.json()
-        found_e5 = False
+        found_target = False # 标记是否找到主要的订阅
 
-        msg_lines.append("## 📋 Office 365 E5 订阅监控")
+        msg_lines.append("## 📋 Office 365 订阅监控")
         msg_lines.append(f"📅 查询时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         msg_lines.append("---")
 
         for sub in data.get('value', []):
-            # 筛选 E5 开发者订阅，通常包含 'DEVELOPERPACK' 或 'E5'
-            # 如果你不确定 SKU 名字，脚本会列出所有订阅
-            sku_part_number = sub.get('skuPartNumber', 'Unknown')
+            sku_part_number = sub.get('skuPartNumber', 'Unknown').upper()
             
-            if "DEVELOPER" in sku_part_number or "E5" in sku_part_number:
-                found_e5 = True
+            # ================= 筛选逻辑 (修改重点) =================
+            # 1. 忽略列表：忽略 Flow Free, Teams Exploratory 等免费/附属订阅
+            ignore_list = ["FLOW_FREE", "TEAMS_EXPLORATORY", "POWER_BI_STANDARD"]
+            
+            # 2. 目标关键词：E5, E3, ENTERPRISE, DEVELOPER, PREMIUM
+            target_keywords = ["DEVELOPER", "E5", "ENTERPRISE", "PREMIUM", "OFFICE"]
+            
+            # 判断：如果包含关键词 且 不在忽略列表中
+            is_target = any(k in sku_part_number for k in target_keywords)
+            
+            if is_target and sku_part_number not in ignore_list:
+                found_target = True
+                
                 status = sub.get('capabilityStatus')
                 prepaid = sub.get('prepaidUnits', {})
                 enabled_count = prepaid.get('enabled', 0)
                 suspended_count = prepaid.get('suspended', 0)
                 warning_count = prepaid.get('warning', 0)
 
-                # 状态判断图标
+                # 设置状态图标
                 icon = "✅" if status == "Enabled" else "⚠️"
                 if status == "Suspended": icon = "❌"
-                if status == "Warning": icon = "⏰"
+                if status == "Warning": icon = "⏰" # 警告通常意味着即将过期
 
-                msg_lines.append(f"**产品名称**: {sku_part_number}")
-                msg_lines.append(f"**当前状态**: {icon} {status}")
-                msg_lines.append(f"**有效数量**: {enabled_count}")
+                msg_lines.append(f"**📦 订阅名称**: {sku_part_number}")
+                msg_lines.append(f"**📊 当前状态**: {icon} {status}")
+                msg_lines.append(f"**👤 许可数量**: {enabled_count}")
                 
                 if warning_count > 0:
-                    msg_lines.append(f"**⚠️ 警告数量**: {warning_count} (可能即将过期)")
+                    msg_lines.append(f"**⏰ 过期警告**: {warning_count} 个许可即将过期")
                 if suspended_count > 0:
-                    msg_lines.append(f"**❌ 禁用数量**: {suspended_count}")
+                    msg_lines.append(f"**❌ 已禁用**: {suspended_count}")
                 
                 msg_lines.append("---")
         
-        if not found_e5:
-            msg_lines.append("⚠️ 未在租户中找到显式的 E5 开发者订阅 (SKU name unmatched)。")
-            msg_lines.append("已列出所有发现的订阅：")
+        # 如果循环结束还没找到 E5/E3，则打印所有找到的（便于后续排查）
+        if not found_target:
+            msg_lines.append("⚠️ 未检测到 E5/E3 主订阅，检测到的所有项目如下：")
             for sub in data.get('value', []):
                 msg_lines.append(f"- {sub.get('skuPartNumber')}")
 
@@ -94,13 +109,13 @@ def send_pushplus(content):
         return
 
     url = 'http://www.pushplus.plus/send'
-    title = "E5 订阅状态日报"
+    title = "Office 365 订阅状态日报"
     
     data = {
         "token": PUSHPLUS_TOKEN,
         "title": title,
         "content": content,
-        "template": "markdown" # 使用 markdown 格式让排版更好看
+        "template": "markdown"
     }
 
     try:
@@ -114,7 +129,7 @@ def send_pushplus(content):
         print(f"❌ 推送网络异常: {e}")
 
 if __name__ == "__main__":
-    print("🚀 开始执行 E5 监控脚本...")
+    print("🚀 开始执行 E5/E3 监控脚本...")
     
     if not all([TENANT_ID, CLIENT_ID, CLIENT_SECRET]):
         print("❌ 错误：环境变量缺失，请检查 Github Secrets 配置。")
@@ -128,4 +143,7 @@ if __name__ == "__main__":
         print(report)
         send_pushplus(report)
     else:
-        send_pushplus("❌ E5 监控脚本无法获取 Access Token，请检查 Azure 应用机密是否过期。")
+        # 如果 Token 获取失败，也尝试发送一条报错通知
+        err_msg = "❌ 监控脚本无法获取 Access Token，请检查 Azure 应用机密(Client Secret)是否过期。"
+        print(err_msg)
+        send_pushplus(err_msg)
