@@ -10,7 +10,7 @@ CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN')
 
 def get_access_token():
-    """获取微软 Graph API 的访问令牌 (Client Credentials Flow)"""
+    """获取微软 Graph API 的访问令牌"""
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
     
     headers = {
@@ -33,7 +33,7 @@ def get_access_token():
         return None
 
 def get_sub_status(token):
-    """查询订阅状态并返回格式化消息"""
+    """查询订阅状态并返回汉化后的消息"""
     url = "https://graph.microsoft.com/v1.0/subscribedSkus"
     headers = {
         'Authorization': f'Bearer {token}'
@@ -41,47 +41,75 @@ def get_sub_status(token):
     
     msg_lines = []
     
+    # ================= 汉化字典 =================
+    # 订阅名称映射表
+    sku_mapping = {
+        "ENTERPRISEPACK": "Office 365 E3 (企业版)",
+        "DEVELOPERPACK_E5": "Microsoft 365 E5 开发者版",
+        "SPE_E5": "Microsoft 365 E5 (商业版)",
+        "SPE_E3": "Microsoft 365 E3 (商业版)",
+        "DESKLESSPACK": "Office 365 F3 (一线员工版)",
+        "FLOW_FREE": "Power Automate (免费版)",
+        "TEAMS_EXPLORATORY": "Teams 探索版"
+    }
+
+    # 状态映射表
+    status_mapping = {
+        "Enabled": "正常",
+        "Suspended": "已禁用",
+        "Warning": "警告 (即将过期)",
+        "Deleted": "已删除",
+        "LockedOut": "已被锁定"
+    }
+
     try:
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             return f"❌ API 请求失败: {response.status_code}\n{response.text}"
 
         data = response.json()
-        found_target = False # 标记是否找到主要的订阅
+        found_target = False 
 
         msg_lines.append("## 📋 Office 365 订阅监控")
         msg_lines.append(f"📅 查询时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         msg_lines.append("---")
 
         for sub in data.get('value', []):
-            sku_part_number = sub.get('skuPartNumber', 'Unknown').upper()
+            raw_sku = sub.get('skuPartNumber', 'Unknown').upper()
             
-            # ================= 筛选逻辑 (修改重点) =================
-            # 1. 忽略列表：忽略 Flow Free, Teams Exploratory 等免费/附属订阅
+            # 筛选逻辑：忽略一些不重要的免费订阅
             ignore_list = ["FLOW_FREE", "TEAMS_EXPLORATORY", "POWER_BI_STANDARD"]
             
-            # 2. 目标关键词：E5, E3, ENTERPRISE, DEVELOPER, PREMIUM
+            # 关键词匹配
             target_keywords = ["DEVELOPER", "E5", "ENTERPRISE", "PREMIUM", "OFFICE"]
             
-            # 判断：如果包含关键词 且 不在忽略列表中
-            is_target = any(k in sku_part_number for k in target_keywords)
+            # 判断是否是我们需要监控的目标
+            is_target = any(k in raw_sku for k in target_keywords)
             
-            if is_target and sku_part_number not in ignore_list:
+            if is_target and raw_sku not in ignore_list:
                 found_target = True
                 
-                status = sub.get('capabilityStatus')
+                raw_status = sub.get('capabilityStatus')
                 prepaid = sub.get('prepaidUnits', {})
                 enabled_count = prepaid.get('enabled', 0)
                 suspended_count = prepaid.get('suspended', 0)
                 warning_count = prepaid.get('warning', 0)
 
-                # 设置状态图标
-                icon = "✅" if status == "Enabled" else "⚠️"
-                if status == "Suspended": icon = "❌"
-                if status == "Warning": icon = "⏰" # 警告通常意味着即将过期
+                # --- 开始翻译 ---
+                # 1. 翻译产品名称 (如果没有在字典里，就保持英文原名)
+                cn_name = sku_mapping.get(raw_sku, raw_sku)
+                
+                # 2. 翻译状态
+                cn_status = status_mapping.get(raw_status, raw_status)
 
-                msg_lines.append(f"**📦 订阅名称**: {sku_part_number}")
-                msg_lines.append(f"**📊 当前状态**: {icon} {status}")
+                # 3. 设置图标
+                icon = "✅" 
+                if raw_status == "Warning": icon = "⏰"
+                if raw_status == "Suspended": icon = "❌"
+                if raw_status == "Deleted": icon = "🗑️"
+
+                msg_lines.append(f"**📦 订阅名称**: {cn_name}")
+                msg_lines.append(f"**📊 当前状态**: {icon} {cn_status}")
                 msg_lines.append(f"**👤 许可数量**: {enabled_count}")
                 
                 if warning_count > 0:
@@ -91,11 +119,11 @@ def get_sub_status(token):
                 
                 msg_lines.append("---")
         
-        # 如果循环结束还没找到 E5/E3，则打印所有找到的（便于后续排查）
         if not found_target:
             msg_lines.append("⚠️ 未检测到 E5/E3 主订阅，检测到的所有项目如下：")
             for sub in data.get('value', []):
-                msg_lines.append(f"- {sub.get('skuPartNumber')}")
+                name = sub.get('skuPartNumber')
+                msg_lines.append(f"- {name} ({sku_mapping.get(name, '未知类型')})")
 
         return "\n".join(msg_lines)
 
@@ -143,7 +171,6 @@ if __name__ == "__main__":
         print(report)
         send_pushplus(report)
     else:
-        # 如果 Token 获取失败，也尝试发送一条报错通知
-        err_msg = "❌ 监控脚本无法获取 Access Token，请检查 Azure 应用机密(Client Secret)是否过期。"
+        err_msg = "❌ 监控脚本无法获取 Access Token，请检查 Azure Client Secret 是否过期。"
         print(err_msg)
         send_pushplus(err_msg)
