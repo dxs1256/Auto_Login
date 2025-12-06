@@ -10,13 +10,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 def validate_env_variables():
     """验证环境变量"""
-    koyeb_accounts_env = os.getenv("KOYEB_ACCOUNTS")
-    if not koyeb_accounts_env:
-        raise ValueError("❌ KOYEB_ACCOUNTS 环境变量未设置或格式错误")
+    koyeb_tokens_env = os.getenv("KOYEB_TOKENS")
+    if not koyeb_tokens_env:
+        raise ValueError("❌ KOYEB_TOKENS 环境变量未设置")
     try:
-        return json.loads(koyeb_accounts_env)
+        return json.loads(koyeb_tokens_env)
     except json.JSONDecodeError:
-        raise ValueError("❌ KOYEB_ACCOUNTS JSON 格式无效")
+        # 兼容只设置了一个 token 的情况（非JSON格式）
+        return [koyeb_tokens_env]
 
 def send_tg_message(message):
     """发送 Telegram 消息"""
@@ -24,63 +25,63 @@ def send_tg_message(message):
     chat_id = os.getenv("TG_CHAT_ID")
 
     if not bot_token or not chat_id:
-        logging.warning("⚠️ TG_BOT_TOKEN 或 TG_CHAT_ID 未设置，跳过 Telegram 通知")
         return
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     data = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
 
     try:
-        response = requests.post(url, data=data, timeout=30)
-        response.raise_for_status()
-        logging.info("✅ Telegram 消息发送成功")
-    except requests.RequestException as e:
-        logging.error(f"❌ 发送 Telegram 消息失败: {e}")
+        requests.post(url, data=data, timeout=10)
+    except Exception as e:
+        logging.error(f"TG 发送失败: {e}")
 
 def send_pushplus_message(message):
     """发送 PushPlus 消息"""
     token = os.getenv("PUSHPLUS_TOKEN")
-
     if not token:
-        logging.warning("⚠️ PUSHPLUS_TOKEN 未设置，跳过 PushPlus 通知")
         return
 
     url = "http://www.pushplus.plus/send"
     data = {
         "token": token,
-        "title": "Koyeb 自动登录通知",
+        "title": "Koyeb 活跃检查通知",
         "content": message,
-        "template": "markdown", # 使用 markdown 格式以保持换行格式
-        "channel": "wechat" # 默认为微信，可根据需要修改
+        "template": "markdown",
+        "channel": "wechat"
     }
 
     try:
-        response = requests.post(url, json=data, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        if result.get("code") == 200:
-            logging.info("✅ PushPlus 消息发送成功")
-        else:
-            logging.error(f"❌ PushPlus 发送失败: {result.get('msg')}")
-    except requests.RequestException as e:
-        logging.error(f"❌ 发送 PushPlus 消息失败: {e}")
+        requests.post(url, json=data, timeout=10)
+    except Exception as e:
+        logging.error(f"PushPlus 发送失败: {e}")
 
-def login_koyeb(email, password):
-    """执行 Koyeb 账户登录"""
-    if not email or not password:
-        return False, "邮箱或密码为空"
-
-    login_url = "https://app.koyeb.com/v1/account/login"
+def check_koyeb_activity(token):
+    """
+    使用 API Token 获取用户信息或服务列表
+    这会被视为一次有效的 API 交互，通常足以证明账户活跃
+    """
+    # 获取用户信息的 API 端点
+    url = "https://app.koyeb.com/v1/account/profile"
+    # 或者列出 App 的端点: "https://app.koyeb.com/v1/apps"
+    
     headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
     }
-    data = {"email": email.strip(), "password": password}
 
     try:
-        response = requests.post(login_url, headers=headers, json=data, timeout=30)
-        response.raise_for_status()
-        return True, "成功"
+        response = requests.get(url, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            # 尝试获取用户名或邮箱来证明成功
+            email = data.get("user", {}).get("email", "Unknown")
+            return True, f"API 调用成功 (账户: {email})"
+        elif response.status_code == 401:
+            return False, "Token 无效或已过期"
+        else:
+            return False, f"API 错误: {response.status_code} - {response.text[:50]}"
+            
     except requests.Timeout:
         return False, "请求超时"
     except requests.RequestException as e:
@@ -89,46 +90,41 @@ def login_koyeb(email, password):
 def main():
     """主流程"""
     try:
-        koyeb_accounts = validate_env_variables()
-        if not koyeb_accounts:
-            raise ValueError("❌ 没有找到有效的 Koyeb 账户信息")
+        tokens = validate_env_variables()
+        if not tokens:
+            raise ValueError("❌ 未找到 Token")
 
-        # 获取北京时间（UTC+8）
+        # 获取北京时间
         current_time = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M")
         messages = []
+        success_count = 0
 
-        for account in koyeb_accounts:
-            email = account.get("email", "").strip()
-            password = account.get("password", "")
+        for index, token in enumerate(tokens):
+            masked_token = token[:5] + "***" + token[-5:] if len(token) > 10 else "Invalid"
+            logging.info(f"🔄 正在检查 Token {index + 1}: {masked_token}")
+            
+            success, message = check_koyeb_activity(token)
+            
+            status_icon = "✅" if success else "❌"
+            messages.append(f"{status_icon} **Token {index + 1}**: {message}")
+            
+            if success:
+                success_count += 1
+            
+            # 避免请求过快
+            time.sleep(2)
 
-            if not email or not password:
-                logging.warning(f"⚠️ 账户信息不完整，跳过: {email}")
-                continue
-
-            logging.info(f"🔄 正在处理账户: {email}")
-            success, message = login_koyeb(email, password)
-
-            result = "🎉 登录结果: 成功" if success else f"❌ 登录失败 | 原因: {message}"
-            messages.append(f"📧 账户: {email}\n\n{result}")
-
-            time.sleep(5)
-
-        summary = f"🗓️ 北京时间: {current_time}\n\n" + "\n\n".join(messages) + "\n\n✅ Koyeb 登录任务执行结束"
+        # 汇总消息
+        summary = f"🗓️ **Koyeb 活跃检查**\n时间: {current_time}\n\n" + "\n".join(messages)
+        summary += f"\n\n📊 成功: {success_count}/{len(tokens)}"
 
         logging.info("📋 任务完成，发送通知")
-        
-        # 发送 Telegram 通知
         send_tg_message(summary)
-        # 发送 PushPlus 通知
         send_pushplus_message(summary)
 
     except Exception as e:
-        error_message = f"❌ 执行出错: {e}"
-        logging.error(error_message)
-        
-        # 出错时也同时发送两个通知
-        send_tg_message(error_message)
-        send_pushplus_message(error_message)
+        logging.error(f"执行出错: {e}")
+        send_tg_message(f"❌ Koyeb 脚本执行出错: {e}")
 
 if __name__ == "__main__":
     main()
