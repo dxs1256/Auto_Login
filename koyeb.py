@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -72,13 +72,21 @@ def check_koyeb_activity(token):
     except Exception as e:
         return False, f"网络异常：{str(e)}", None
 
+def get_beijing_time():
+    """获取北京时间字符串"""
+    # 获取 UTC 时间并加 8 小时
+    utc_now = datetime.now(timezone.utc)
+    beijing_now = utc_now + timedelta(hours=8)
+    return beijing_now.strftime("%Y-%m-%d %H:%M:%S")
+
 def main():
     try:
         tokens = validate_env_variables()
         token = tokens[0]
         masked_token = token[:6] + "****" + token[-4:] if len(token) > 10 else "****"
         
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 获取北京时间
+        current_time = get_beijing_time()
 
         logging.info("开始检查 Koyeb 账户状态...")
         
@@ -90,26 +98,26 @@ def main():
             except:
                 email = "未知邮箱"
             
-            # --- 成功通知 (无加粗) ---
+            # --- 成功通知 (无加粗, 北京时间) ---
             summary = (
                 "☁️ Koyeb 账户状态报告\n\n"
                 "✅ 状态：活跃正常\n"
                 "--------------------\n"
                 f"👤 账号邮箱：`{email}`\n"
                 f"🔑 Token掩码：`{masked_token}`\n"
-                f"⏰ 检测时间：`{current_time}`\n"
+                f"⏰ 北京时间：`{current_time}`\n"
                 "--------------------\n"
                 "✨ 账户运行良好，无需任何操作。"
             )
         else:
-            # --- 失败通知 (无加粗) ---
+            # --- 失败通知 (无加粗, 北京时间) ---
             summary = (
                 "🚨 Koyeb 账户异常警报\n\n"
                 "❌ 状态：检测失败\n"
                 "--------------------\n"
                 f"🔑 Token掩码：`{masked_token}`\n"
                 f"🚫 错误原因：{result_msg}\n"
-                f"⏰ 检测时间：`{current_time}`\n"
+                f"⏰ 北京时间：`{current_time}`\n"
                 "--------------------\n"
                 "⚠️ 建议操作：\n"
                 "请登录 Koyeb 控制台检查，或更新环境变量 Token。"
@@ -120,12 +128,12 @@ def main():
         logging.info("检查完成，通知已推送")
 
     except Exception as e:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # --- 错误通知 (无加粗) ---
+        current_time = get_beijing_time()
+        # --- 错误通知 (无加粗, 北京时间) ---
         error_msg = (
             "💣 Koyeb 脚本运行错误\n\n"
             f"❌ 错误信息：`{str(e)}`\n"
-            f"⏰ 发生时间：`{current_time}`\n\n"
+            f"⏰ 北京时间：`{current_time}`\n\n"
             "请检查环境变量配置或网络连接。"
         )
         logging.error(error_msg)
