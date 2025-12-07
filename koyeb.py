@@ -2,13 +2,14 @@ import os
 import json
 import logging
 import requests
+import re
 from datetime import datetime, timedelta, timezone
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def validate_env_variables():
-    """验证并读取 KOYEB_TOKENS（支持单个字符串或 JSON 数组）"""
+    """验证并读取 KOYEB_TOKENS"""
     koyeb_tokens_env = os.getenv("KOYEB_TOKENS")
     if not koyeb_tokens_env:
         raise ValueError("KOYEB_TOKENS 环境变量未设置")
@@ -19,7 +20,7 @@ def validate_env_variables():
         return [koyeb_tokens_env]
 
 def send_tg_message(message):
-    """发送 Telegram 消息"""
+    """发送 Telegram 消息 (保持 Markdown)"""
     bot_token = os.getenv("TG_BOT_TOKEN")
     chat_id = os.getenv("TG_CHAT_ID")
     if not bot_token or not chat_id:
@@ -33,16 +34,33 @@ def send_tg_message(message):
         logging.error(f"TG 发送失败: {e}")
 
 def send_pushplus_message(message):
-    """发送 PushPlus 消息"""
+    """发送 PushPlus 消息 (转换为 HTML 以控制字号)"""
     token = os.getenv("PUSHPLUS_TOKEN")
     if not token:
         return
     url = "http://www.pushplus.plus/send"
+    
+    # --- 格式转换逻辑 ---
+    # 1. 将 Markdown 的反引号 `text` 转换为 HTML 的高亮样式
+    # 使用浅灰色背景，圆角，等宽字体，字号适当缩小
+    html_content = re.sub(
+        r'`(.*?)`', 
+        r'<span style="background-color: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: monospace; color: #d63384;">\1</span>', 
+        message
+    )
+    
+    # 2. 将换行符转换为 HTML 换行标签
+    html_content = html_content.replace("\n", "<br>")
+    
+    # 3. 外层包裹 div，强制设置较小的字号 (14px) 和合适的行高
+    final_content = f'<div style="font-size: 14px; line-height: 1.6; color: #333;">{html_content}</div>'
+    # ------------------
+
     data = {
         "token": token,
-        "title": "Koyeb 账户状态报告",
-        "content": message,
-        "template": "markdown"
+        "title": "Koyeb 账户状态",
+        "content": final_content,
+        "template": "html"  # 这里改为 html 模板
     }
     try:
         requests.post(url, json=data, timeout=10)
@@ -74,7 +92,6 @@ def check_koyeb_activity(token):
 
 def get_beijing_time():
     """获取北京时间字符串"""
-    # 获取 UTC 时间并加 8 小时
     utc_now = datetime.now(timezone.utc)
     beijing_now = utc_now + timedelta(hours=8)
     return beijing_now.strftime("%Y-%m-%d %H:%M:%S")
@@ -85,7 +102,6 @@ def main():
         token = tokens[0]
         masked_token = token[:6] + "****" + token[-4:] if len(token) > 10 else "****"
         
-        # 获取北京时间
         current_time = get_beijing_time()
 
         logging.info("开始检查 Koyeb 账户状态...")
@@ -98,7 +114,6 @@ def main():
             except:
                 email = "未知邮箱"
             
-            # --- 成功通知 (无加粗, 北京时间) ---
             summary = (
                 "☁️ Koyeb 账户状态报告\n\n"
                 "✅ 状态：活跃正常\n"
@@ -110,7 +125,6 @@ def main():
                 "✨ 账户运行良好，无需任何操作。"
             )
         else:
-            # --- 失败通知 (无加粗, 北京时间) ---
             summary = (
                 "🚨 Koyeb 账户异常警报\n\n"
                 "❌ 状态：检测失败\n"
@@ -123,13 +137,13 @@ def main():
                 "请登录 Koyeb 控制台检查，或更新环境变量 Token。"
             )
 
+        # 分别调用发送函数
         send_tg_message(summary)
         send_pushplus_message(summary)
         logging.info("检查完成，通知已推送")
 
     except Exception as e:
         current_time = get_beijing_time()
-        # --- 错误通知 (无加粗, 北京时间) ---
         error_msg = (
             "💣 Koyeb 脚本运行错误\n\n"
             f"❌ 错误信息：`{str(e)}`\n"
