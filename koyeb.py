@@ -1,9 +1,8 @@
 import os
 import json
-import time
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -17,7 +16,7 @@ def validate_env_variables():
         tokens = json.loads(koyeb_tokens_env)
         return tokens if isinstance(tokens, list) else [tokens]
     except json.JSONDecodeError:
-        return [koyeb_tokens_env]  # 单个 token 时直接使用
+        return [koyeb_tokens_env]
 
 def send_tg_message(message):
     """发送 Telegram 消息"""
@@ -41,7 +40,7 @@ def send_pushplus_message(message):
     url = "http://www.pushplus.plus/send"
     data = {
         "token": token,
-        "title": "Koyeb 账户状态",
+        "title": "Koyeb 账户状态报告",
         "content": message,
         "template": "markdown"
     }
@@ -63,7 +62,7 @@ def check_koyeb_activity(token):
         if response.status_code == 200:
             data = response.json()
             email = data.get("user", {}).get("email", "未知邮箱")
-            return True, email, response  # 返回 response 以便后续取 email
+            return True, email, response
         elif response.status_code == 401:
             return False, "Token 无效或已过期", None
         else:
@@ -76,47 +75,59 @@ def check_koyeb_activity(token):
 def main():
     try:
         tokens = validate_env_variables()
-        token = tokens[0]  # 你只有一个账号，直接取第一个
+        token = tokens[0]
         masked_token = token[:6] + "****" + token[-4:] if len(token) > 10 else "****"
+        
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         logging.info("开始检查 Koyeb 账户状态...")
         
         success, result_msg, response = check_koyeb_activity(token)
         
         if success:
-            # 成功时提取真实邮箱
             try:
                 email = response.json().get("user", {}).get("email", "未知邮箱")
             except:
                 email = "未知邮箱"
             
-            summary = f"""Koyeb 账户状态
-
-活跃正常
-邮箱：{email}
-
-一切正常，无需操作～
-保持活跃中..."""
+            # --- 成功通知 (无加粗) ---
+            summary = (
+                "☁️ Koyeb 账户状态报告\n\n"
+                "✅ 状态：活跃正常\n"
+                "--------------------\n"
+                f"👤 账号邮箱：`{email}`\n"
+                f"🔑 Token掩码：`{masked_token}`\n"
+                f"⏰ 检测时间：`{current_time}`\n"
+                "--------------------\n"
+                "✨ 账户运行良好，无需任何操作。"
+            )
         else:
-            summary = f"""Koyeb 账户状态
+            # --- 失败通知 (无加粗) ---
+            summary = (
+                "🚨 Koyeb 账户异常警报\n\n"
+                "❌ 状态：检测失败\n"
+                "--------------------\n"
+                f"🔑 Token掩码：`{masked_token}`\n"
+                f"🚫 错误原因：{result_msg}\n"
+                f"⏰ 检测时间：`{current_time}`\n"
+                "--------------------\n"
+                "⚠️ 建议操作：\n"
+                "请登录 Koyeb 控制台检查，或更新环境变量 Token。"
+            )
 
-已失活或异常
-掩码：{masked_token}
-原因：{result_msg}
-
-请尽快登录 Koyeb 后台重新生成 Token！"""
-
-        # 发送通知
         send_tg_message(summary)
         send_pushplus_message(summary)
         logging.info("检查完成，通知已推送")
 
     except Exception as e:
-        error_msg = f"""Koyeb 脚本执行失败
-
-错误信息：{str(e)}
-
-请检查环境变量或网络连接"""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # --- 错误通知 (无加粗) ---
+        error_msg = (
+            "💣 Koyeb 脚本运行错误\n\n"
+            f"❌ 错误信息：`{str(e)}`\n"
+            f"⏰ 发生时间：`{current_time}`\n\n"
+            "请检查环境变量配置或网络连接。"
+        )
         logging.error(error_msg)
         send_tg_message(error_msg)
         send_pushplus_message(error_msg)
