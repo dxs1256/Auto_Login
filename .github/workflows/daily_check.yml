@@ -2,7 +2,7 @@ name: 火烧云监控
 
 on:
   schedule:
-    # 每天北京时间 14:00 (UTC 6:00) 和 17:00 (UTC 9:00) 运行
+    # 每天北京时间 14:00 (UTC 6:00) 和 17:00 (UTC 9:00)
     - cron: '0 6,9 * * *'
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Node.js 环境
+      - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -22,10 +22,17 @@ jobs:
       - name: 安装依赖
         run: npm install axios
 
-      - name: 运行监控脚本
+      - name: 运行监控
         env:
-          # ⚠️ 这里改成 WX_WEBHOOK_URL
-          WX_WEBHOOK_URL: ${{ secrets.WX_WEBHOOK_URL }}
+          # 城市设置
           SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
           SUNSET_THRESHOLD: '0.5'
+          
+          # 企业微信 (如果不需要可以不填)
+          WX_WEBHOOK_URL: ${{ secrets.WX_WEBHOOK_URL }}
+          
+          # Telegram 配置
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          
         run: node sunset_monitor.js
