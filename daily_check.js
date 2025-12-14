@@ -9,7 +9,7 @@ const axios = require('axios');
 
 // ==================== 配置区 ====================
 // 基础配置
-const CITY = process.env.SUNSET_CITY || '广东省-深圳'; 
+const CITY = process.env.SUNSET_CITY || '湖北省-十堰'; 
 const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5'); 
 const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS']; 
 const EVENTS = ['set_2', 'set_1', 'rise_2']; 
