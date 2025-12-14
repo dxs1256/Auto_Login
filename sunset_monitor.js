@@ -1,6 +1,6 @@
 /*
-青龙火烧云概率监控脚本 (企业微信版) v2.20
-功能：监控日出日落火烧云概率，当概率高于阈值时发送企业微信机器人通知
+青龙火烧云概率监控脚本 (多通道通知版) v2.21
+功能：监控日出日落火烧云概率，支持企业微信机器人和Telegram通知
 作者：Claude
 更新时间：2025-12-14
 */
@@ -8,15 +8,16 @@
 const axios = require('axios');
 
 // ==================== 配置区 ====================
-// 必填配置
-const CITY = process.env.SUNSET_CITY || '广东省-深圳'; // 查询城市
-// 企业微信机器人的 Webhook 地址 (格式: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx)
-const WX_WEBHOOK_URL = process.env.WX_WEBHOOK_URL || ''; 
+// 基础配置
+const CITY = process.env.SUNSET_CITY || '广东省-深圳'; 
+const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5'); 
+const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS']; 
+const EVENTS = ['set_2', 'set_1', 'rise_2']; 
 
-// 可选配置
-const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5'); // 火烧云概率阈值
-const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS']; // 模型选择
-const EVENTS = ['set_2', 'set_1', 'rise_2']; // 监控事件
+// 通道配置 (为空则不发送)
+const WX_WEBHOOK_URL = process.env.WX_WEBHOOK_URL || ''; // 企业微信
+const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN || '';     // Telegram Bot Token
+const TG_CHAT_ID = process.env.TG_CHAT_ID || '';         // Telegram Chat ID
 
 // ==================== 全局变量 ====================
 const API_BASE = 'https://sunsetbot.top/';
@@ -49,16 +50,7 @@ function getQualityLevel(quality) {
   return '❌ 不烧';
 }
 
-/**
- * 获取带颜色的质量描述 (企业微信 Markdown 格式)
- */
-function getColoredQualityLevel(quality) {
-  const levelText = getQualityLevel(quality);
-  // 绿色: info, 橙红色: warning, 灰色: comment
-  if (quality >= 0.6) return `<font color="warning">${levelText}</font>`;
-  if (quality >= 0.4) return `<font color="info">${levelText}</font>`;
-  return `<font color="comment">${levelText}</font>`;
-}
+// -------------------- 数据查询 --------------------
 
 async function querySunsetData(city, event, model) {
   const queryId = generateQueryId();
@@ -81,80 +73,99 @@ async function querySunsetData(city, event, model) {
   }
 }
 
-/**
- * 发送企业微信机器人通知 (Markdown)
- */
-async function sendWeChatNotification(title, content) {
-  if (!WX_WEBHOOK_URL) {
-    console.log('⚠️ 未配置 WX_WEBHOOK_URL，跳过推送');
-    return false;
-  }
-
-  // 组装 Markdown 内容
-  const markdownContent = `## ${title}\n${content}`;
-
-  try {
-    const response = await axios.post(WX_WEBHOOK_URL, {
-      msgtype: "markdown",
-      markdown: {
-        content: markdownContent
-      }
-    });
-
-    if (response.data && response.data.errcode === 0) {
-      console.log('✅ 企业微信通知发送成功');
-      return true;
-    }
-    console.log('⚠️ 企业微信发送失败:', response.data);
-    return false;
-  } catch (error) {
-    console.log(`❌ 推送异常: ${error.message}`);
-    return false;
-  }
-}
+// -------------------- 格式化与发送逻辑 --------------------
 
 /**
- * 格式化为 Markdown 字符串
+ * 格式化：企业微信 (Markdown + 颜色)
  */
-function formatNotification(results) {
-  const lines = [];
-  const eventGroups = {};
-  
-  results.forEach(r => {
-    if (!eventGroups[r.event]) eventGroups[r.event] = [];
-    eventGroups[r.event].push(r);
-  });
+function formatForWeCom(results, city) {
+  const lines = [`## 🌅 ${city} 火烧云预警`];
+  const eventGroups = groupByEvent(results);
   
   Object.keys(eventGroups).forEach(event => {
-    const eventData = eventGroups[event];
-    const eventName = EVENT_NAMES[event] || event;
-    
-    // 使用引用格式 > 区分不同事件
-    lines.push(`\n### ${eventName}`);
-    
-    eventData.forEach(data => {
-      const quality = parseQuality(data.tb_quality);
-      const levelHtml = getColoredQualityLevel(quality);
-      const time = data.tb_event_time || '未知';
-      const aod = data.tb_aod || '未知';
+    lines.push(`\n### ${EVENT_NAMES[event] || event}`);
+    eventGroups[event].forEach(data => {
+      const levelText = getQualityLevel(data.quality);
+      // 企微颜色代码: warning(橙红), info(绿), comment(灰)
+      let color = 'comment';
+      if (data.quality >= 0.6) color = 'warning';
+      else if (data.quality >= 0.4) color = 'info';
       
-      // 每一行详情
-      lines.push(`> **${data.model}**: ${levelHtml} (${quality})`);
-      lines.push(`> <font color="comment">时间: ${time}</font>`);
-      lines.push(`> <font color="comment">AOD: ${aod}</font>`);
-      lines.push('>'); // 空行间隔
+      lines.push(`> **${data.model}**: <font color="${color}">${levelText}</font> (${data.quality})`);
+      lines.push(`> <font color="comment">时间: ${data.tb_event_time}</font>`);
+      lines.push('>'); 
     });
   });
-  
   return lines.join('\n');
 }
 
 /**
- * 主函数
+ * 格式化：Telegram (HTML)
+ * Telegram 不支持 colored text，只能用 Emoji 和 Bold
  */
+function formatForTelegram(results, city) {
+  const lines = [`<b>🌅 ${city} 火烧云预警</b>`];
+  const eventGroups = groupByEvent(results);
+
+  Object.keys(eventGroups).forEach(event => {
+    lines.push(``); // 空行
+    lines.push(`<u><b>${EVENT_NAMES[event] || event}</b></u>`);
+    eventGroups[event].forEach(data => {
+      lines.push(`<b>${data.model}</b>: ${getQualityLevel(data.quality)} <code>(${data.quality})</code>`);
+      lines.push(`时间: ${data.tb_event_time}`);
+      lines.push(`AOD: ${data.tb_aod}`);
+    });
+  });
+  return lines.join('\n');
+}
+
+function groupByEvent(results) {
+  const groups = {};
+  results.forEach(r => {
+    if (!groups[r.event]) groups[r.event] = [];
+    groups[r.event].push(r);
+  });
+  return groups;
+}
+
+// -------------------- 发送通道 --------------------
+
+async function sendWeChat(content) {
+  if (!WX_WEBHOOK_URL) return;
+  try {
+    await axios.post(WX_WEBHOOK_URL, {
+      msgtype: "markdown",
+      markdown: { content }
+    });
+    console.log('✅ 企业微信通知已发送');
+  } catch (e) {
+    console.log(`⚠️ 企业微信发送失败: ${e.message}`);
+  }
+}
+
+async function sendTelegram(content) {
+  if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
+  try {
+    const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
+    await axios.post(url, {
+      chat_id: TG_CHAT_ID,
+      text: content,
+      parse_mode: 'HTML', // 使用 HTML 模式以支持加粗
+      disable_web_page_preview: true
+    });
+    console.log('✅ Telegram 通知已发送');
+  } catch (e) {
+    console.log(`⚠️ Telegram 发送失败: ${e.message}`);
+  }
+}
+
+// -------------------- 主程序 --------------------
+
 async function main() {
-  console.log('==================== 火烧云监控开始 (WeChat版) ====================');
-  console.log(`📍 监控城市: ${CITY}`);
+  console.log('==================== 火烧云监控启动 ====================');
+  console.log(`📍 城市: ${CITY} | 阈值: ${THRESHOLD}`);
+  if(WX_WEBHOOK_URL) console.log('🔔 企业微信通知: 已启用');
+  if(TG_BOT_TOKEN) console.log('✈️ Telegram通知: 已启用');
   
   const notifyResults = [];
   
@@ -165,19 +176,18 @@ async function main() {
       
       if (data) {
         const quality = parseQuality(data.tb_quality);
-        const result = {
-          model, event, eventName: EVENT_NAMES[event],
-          quality, tb_quality: data.tb_quality,
-          tb_event_time: data.tb_event_time, tb_aod: data.tb_aod
-        };
-        
-        console.log(`   质量: ${data.tb_quality} | 时间: ${data.tb_event_time}`);
+        console.log(`   --> ${data.tb_quality} | ${data.tb_event_time}`);
         
         if (quality >= THRESHOLD) {
           if (event === 'set_1' && todaySunsetNotified) {
-            console.log(`   ⏭️ 今天落日已通知过`);
+            console.log(`   ⏭️ 今天落日已通知，跳过`);
           } else {
-            notifyResults.push(result);
+            notifyResults.push({
+              model, event, quality,
+              tb_quality: data.tb_quality,
+              tb_event_time: data.tb_event_time,
+              tb_aod: data.tb_aod
+            });
             if (event === 'set_1') todaySunsetNotified = true;
           }
         }
@@ -187,12 +197,22 @@ async function main() {
   }
   
   if (notifyResults.length > 0) {
-    const title = `🌅 ${CITY} 火烧云预警`;
-    const content = formatNotification(notifyResults);
-    console.log('📱 发送企业微信通知...');
-    await sendWeChatNotification(title, content);
+    console.log('\n📱 正在推送通知...');
+    
+    // 1. 发送企业微信
+    if (WX_WEBHOOK_URL) {
+      const wxContent = formatForWeCom(notifyResults, CITY);
+      await sendWeChat(wxContent);
+    }
+    
+    // 2. 发送 Telegram
+    if (TG_BOT_TOKEN && TG_CHAT_ID) {
+      const tgContent = formatForTelegram(notifyResults, CITY);
+      await sendTelegram(tgContent);
+    }
+    
   } else {
-    console.log('💤 暂无高概率数据，无需通知');
+    console.log('\n💤 无高概率数据，不发送通知');
   }
 }
 
