@@ -78,3 +78,5 @@
 ---
 
 **一键 Fork + 配置 Secrets 即可开跑，解放双手，从此躺平！**
+
+![GitHub Card](https://githubcard.com/dxs1256.svg?d=dyhNeN-F)
