@@ -1,10 +1,10 @@
-name: 🌅 Loomi 每日签到 + TG/PushPlus通知
+name: Loomi 每日签到
 
 on:
   schedule:
     # 每天北京时间09:00 (UTC 01:00)
     - cron: '0 1 * * *'
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   signin:
@@ -32,7 +32,7 @@ jobs:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-      run: python loomi_pro.py
+      run: python loomi.py  # 👈 修改这里！
 
     - name: 📊 保存完整报告
       if: always()
@@ -42,5 +42,4 @@ jobs:
         path: |
           credits_report.txt
           loomi.log
-          tokens.json
         retention-days: 30
