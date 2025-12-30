@@ -2,103 +2,170 @@ import requests
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-def get_loomi_credits():
+class LoomiTokenManager:
+    def __init__(self):
+        self.api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cGN6dnd5Z2VscnZ4emZkY2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4OTU3ODUsImV4cCI6MjA2NTQ3MTc4NX0.y7uP6NVj48UAKnMWcB_5LltTVCVFuSeo7xmrCEHlp1I"
+        self.tokens_file = "tokens.json"
+        self.session = requests.Session()
+        self.load_tokens()
+    
+    def save_tokens(self, access_token, refresh_token, expires_in):
+        """保存token到文件"""
+        token_data = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": (datetime.now() + timedelta(seconds=expires_in)).isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        with open(self.tokens_file, 'w') as f:
+            json.dump(token_data, f, indent=2)
+        logger.info("💾 Token已保存")
+    
+    def load_tokens(self):
+        """加载本地token"""
+        if os.path.exists(self.tokens_file):
+            with open(self.tokens_file, 'r') as f:
+                data = json.load(f)
+                self.session.headers.update({
+                    "Authorization": f"Bearer {data['access_token']}",
+                    "Content-Type": "application/json"
+                })
+                logger.info("💾 已加载本地token")
+    
+    def login(self, email, password):
+        """登录获取新token"""
+        login_headers = {
+            "apikey": self.api_key,
+            "Content-Type": "application/json;charset=UTF-8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        
+        resp = requests.post(
+            "https://auth.loomi.live/auth/v1/token?grant_type=password",
+            json={"email": email, "password": password},
+            headers=login_headers
+        )
+        
+        if resp.status_code == 200:
+            tokens = resp.json()
+            self.save_tokens(
+                tokens["access_token"], 
+                tokens["refresh_token"], 
+                tokens["expires_in"]
+            )
+            self.session.headers["Authorization"] = f"Bearer {tokens['access_token']}"
+            logger.info("✅ 登录成功")
+            return True
+        logger.error(f"❌ 登录失败: {resp.text}")
+        return False
+    
+    def refresh_token(self):
+        """自动刷新token"""
+        if not hasattr(self, '_refresh_token'):
+            return False
+        
+        refresh_headers = {
+            "apikey": self.api_key,
+            "Content-Type": "application/json;charset=UTF-8"
+        }
+        
+        resp = requests.post(
+            "https://auth.loomi.live/auth/v1/token?grant_type=refresh_token",
+            json={"refresh_token": self._refresh_token},
+            headers=refresh_headers
+        )
+        
+        if resp.status_code == 200:
+            tokens = resp.json()
+            self.save_tokens(
+                tokens["access_token"],
+                tokens.get("refresh_token", self._refresh_token),
+                tokens["expires_in"]
+            )
+            self.session.headers["Authorization"] = f"Bearer {tokens['access_token']}"
+            logger.info("🔄 Token刷新成功")
+            return True
+        logger.error("❌ Token刷新失败")
+        return False
+    
+    def ensure_valid_token(self, email, password):
+        """确保token有效（自动登录/刷新）"""
+        # 检查本地token是否过期
+        if os.path.exists(self.tokens_file):
+            with open(self.tokens_file, 'r') as f:
+                data = json.load(f)
+                expires_at = datetime.fromisoformat(data['expires_at'])
+                if datetime.now() < expires_at - timedelta(minutes=10):  # 提前10分钟刷新
+                    logger.info("✅ Token有效")
+                    return True
+        
+        # 尝试刷新
+        if self.refresh_token():
+            return True
+        
+        # 重新登录
+        logger.info("🔐 重新登录...")
+        return self.login(email, password)
+    
+    def get_credits(self):
+        """获取积分"""
+        resp = self.session.get("https://api.loomi.chat/api/v1/payment/subscription/status")
+        logger.info(f"积分API: {resp.status_code}")
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            credits = data.get('data', {}).get('credits', {}) if data.get('success') else data
+            
+            available = credits.get('available', 0)
+            total = credits.get('total', 0)
+            
+            return available, total, data
+        return 0, 0, None
+
+def loomi_signin():
     email = os.getenv("LOOMI_EMAIL")
     password = os.getenv("LOOMI_PASSWORD")
     
-    # 从你的HAR文件 - 正确API Key
-    api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cGN6dnd5Z2VscnZ4emZkY2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4OTU3ODUsImV4cCI6MjA2NTQ3MTc4NX0.y7uP6NVj48UAKnMWcB_5LltTVCVFuSeo7xmrCEHlp1I"
+    manager = LoomiTokenManager()
     
-    # 1️⃣ 登录
-    login_headers = {
-        "apikey": api_key,
-        "Content-Type": "application/json;charset=UTF-8",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Origin": "https://loomi.live",
-        "Referer": "https://loomi.live/"
-    }
+    # 确保token有效
+    if not manager.ensure_valid_token(email, password):
+        print("❌ Token管理失败")
+        return False
     
-    login_resp = requests.post(
-        "https://auth.loomi.live/auth/v1/token?grant_type=password",
-        json={"email": email, "password": password},
-        headers=login_headers,
-        timeout=15
-    )
+    # 获取积分
+    available, total, raw_data = manager.get_credits()
     
-    if login_resp.status_code != 200:
-        print(f"❌ 登录失败: {login_resp.status_code}")
-        print(login_resp.text)
-        return
-    
-    tokens = login_resp.json()
-    access_token = tokens["access_token"]
-    logger.info("✅ 登录成功")
-    
-    # 2️⃣ 获取积分（带token）
-    api_headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-    
-    credits_resp = requests.get(
-        "https://api.loomi.chat/api/v1/payment/subscription/status",
-        headers=api_headers,
-        timeout=15
-    )
-    
-    logger.info(f"积分API状态: {credits_resp.status_code}")
-    logger.info(f"积分响应: {credits_resp.text[:500]}")
-    
-    if credits_resp.status_code == 200:
-        data = credits_resp.json()
-        
-        # 精确解析你的4,050积分
-        available = 0
-        total = 0
-        
-        # 从HAR文件已知结构
-        if data.get('success') and data['data']:
-            credits = data['data'].get('credits', {})
-            available = credits.get('available', 0)
-            total = credits.get('total', 0)
-        else:
-            # 直接字段
-            available = data.get('available', 0) or data.get('credits', {}).get('available', 0)
-            total = data.get('total', 0) or data.get('credits', {}).get('total', 0)
-        
-        result = f"""
-🎯 积分概览 (https://v2.loomi.live/zh/profile#user) 
+    result = f"""
+🎯 积分概览 (v2.loomi.live/zh/profile#user)
 ━━━━━━━━━━━━━━━━━━━━━━
-💰 可用积分: {available:,}  ← 你页面显示的4,050
+💰 可用积分: {available:,}
 💎 总积分:   {total:,}
 
-📅 获取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-📧 账号:     {email}
+📅 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📧 账号: {email}
+💾 Token状态: 已自动管理
 ━━━━━━━━━━━━━━━━━━━━━━
-        """
-        
-        print(result)
-        
-        # 保存
-        with open("credits_report.txt", "w", encoding="utf-8") as f:
-            f.write(result + "\n\n原始数据:\n" + json.dumps(data, indent=2, ensure_ascii=False))
-        
-        logger.info(f"🎉 积分获取成功: {available}/{total}")
-        return True
-    else:
-        print(f"❌ 积分获取失败: {credits_resp.status_code}")
-        print(credits_resp.text)
-        return False
+    """
+    
+    print(result)
+    
+    # 保存完整报告
+    report = result + f"\n\n原始数据:\n{json.dumps(raw_data, indent=2, ensure_ascii=False) if raw_data else '无数据'}"
+    with open("credits_report.txt", "w", encoding="utf-8") as f:
+        f.write(report)
+    
+    logger.info(f"🎉 签到完成: {available}/{total}")
+    return True
 
 if __name__ == "__main__":
     if os.getenv('GITHUB_ACTIONS'):
-        success = get_loomi_credits()
+        success = loomi_signin()
         exit(0 if success else 1)
     else:
-        get_loomi_credits()
+        loomi_signin()
