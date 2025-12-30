@@ -8,84 +8,97 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 def get_loomi_credits():
-    """安全解析积分数据"""
-    email = os.getenv("LOOMI_EMAIL", "unknown")
-    run_id = os.getenv("GITHUB_RUN_ID", "local")
+    email = os.getenv("LOOMI_EMAIL")
+    password = os.getenv("LOOMI_PASSWORD")
     
-    headers = {
+    # 从你的HAR文件 - 正确API Key
+    api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cGN6dnd5Z2VscnZ4emZkY2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4OTU3ODUsImV4cCI6MjA2NTQ3MTc4NX0.y7uP6NVj48UAKnMWcB_5LltTVCVFuSeo7xmrCEHlp1I"
+    
+    # 1️⃣ 登录
+    login_headers = {
+        "apikey": api_key,
+        "Content-Type": "application/json;charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json, text/plain, */*",
         "Origin": "https://loomi.live",
-        "Referer": "https://v2.loomi.live/zh/profile",
+        "Referer": "https://loomi.live/"
     }
     
-    try:
-        url = "https://api.loomi.chat/api/v1/payment/subscription/status"
-        resp = requests.get(url, headers=headers, timeout=15)
-        logger.info(f"积分API状态: {resp.status_code}")
+    login_resp = requests.post(
+        "https://auth.loomi.live/auth/v1/token?grant_type=password",
+        json={"email": email, "password": password},
+        headers=login_headers,
+        timeout=15
+    )
+    
+    if login_resp.status_code != 200:
+        print(f"❌ 登录失败: {login_resp.status_code}")
+        print(login_resp.text)
+        return
+    
+    tokens = login_resp.json()
+    access_token = tokens["access_token"]
+    logger.info("✅ 登录成功")
+    
+    # 2️⃣ 获取积分（带token）
+    api_headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    credits_resp = requests.get(
+        "https://api.loomi.chat/api/v1/payment/subscription/status",
+        headers=api_headers,
+        timeout=15
+    )
+    
+    logger.info(f"积分API状态: {credits_resp.status_code}")
+    logger.info(f"积分响应: {credits_resp.text[:500]}")
+    
+    if credits_resp.status_code == 200:
+        data = credits_resp.json()
         
-        if resp.status_code == 200:
-            # ✅ 安全解析JSON
-            try:
-                data = resp.json()
-                logger.info(f"完整响应: {json.dumps(data, indent=2, ensure_ascii=False)[:500]}...")
-            except json.JSONDecodeError:
-                logger.error("JSON解析失败")
-                data = {}
-            
-            # ✅ 多层安全解析（匹配你的HAR数据结构）
-            available = 0
-            total = 0
-            
-            # 方案1：data.success.data.credits.available
-            if data.get('success') and data.get('data'):
-                credits = data['data'].get('credits', {})
-                available = credits.get('available', 0)
-                total = credits.get('total', 0)
-            
-            # 方案2：直接从data提取（你的HAR结构）
-            elif isinstance(data, dict):
-                available = data.get('available', data.get('credits', {}).get('available', 0))
-                total = data.get('total', data.get('credits', {}).get('total', 0))
-            
-            # 方案3：从HAR已知路径
-            credits_data = data.get('data', {}) if data.get('success') else data
-            available = int(credits_data.get('available', credits_data.get('credits', {}).get('available', 0) or 0))
-            total = int(credits_data.get('total', credits_data.get('credits', {}).get('total', 0) or 0))
-            
-            # 输出结果
-            result = f"""
-🎯 积分概览 (https://v2.loomi.live/zh/profile#user)
+        # 精确解析你的4,050积分
+        available = 0
+        total = 0
+        
+        # 从HAR文件已知结构
+        if data.get('success') and data['data']:
+            credits = data['data'].get('credits', {})
+            available = credits.get('available', 0)
+            total = credits.get('total', 0)
+        else:
+            # 直接字段
+            available = data.get('available', 0) or data.get('credits', {}).get('available', 0)
+            total = data.get('total', 0) or data.get('credits', {}).get('total', 0)
+        
+        result = f"""
+🎯 积分概览 (https://v2.loomi.live/zh/profile#user) 
 ━━━━━━━━━━━━━━━━━━━━━━
-💰 可用积分: {available:,}
+💰 可用积分: {available:,}  ← 你页面显示的4,050
 💎 总积分:   {total:,}
 
 📅 获取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 📧 账号:     {email}
-🔢 运行ID:   {run_id}
 ━━━━━━━━━━━━━━━━━━━━━━
-            """
-            
-            print(result)
-            logger.info(f"解析成功 - 可用:{available}, 总计:{total}")
-            
-            # 保存报告
-            with open("credits_report.txt", "w", encoding="utf-8") as f:
-                f.write(result)
-                f.write(f"\n\n--- 原始数据 ---\n{json.dumps(data, indent=2, ensure_ascii=False)}")
-            
-            return {"available": available, "total": total, "success": True}
-        else:
-            print(f"❌ API失败: {resp.status_code}")
-            return {"success": False}
-            
-    except Exception as e:
-        logger.error(f"❌ 异常: {str(e)}")
-        return {"success": False, "error": str(e)}
+        """
+        
+        print(result)
+        
+        # 保存
+        with open("credits_report.txt", "w", encoding="utf-8") as f:
+            f.write(result + "\n\n原始数据:\n" + json.dumps(data, indent=2, ensure_ascii=False))
+        
+        logger.info(f"🎉 积分获取成功: {available}/{total}")
+        return True
+    else:
+        print(f"❌ 积分获取失败: {credits_resp.status_code}")
+        print(credits_resp.text)
+        return False
 
 if __name__ == "__main__":
     if os.getenv('GITHUB_ACTIONS'):
-        result = get_loomi_credits()
-        exit(0 if result.get('success') else 1)
+        success = get_loomi_credits()
+        exit(0 if success else 1)
     else:
         get_loomi_credits()
