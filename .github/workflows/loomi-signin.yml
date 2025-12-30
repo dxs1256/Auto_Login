@@ -4,7 +4,7 @@ on:
   schedule:
     # 每天 UTC 1:00 (北京时间 09:00)
     - cron: '0 1 * * *'
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   signin:
@@ -20,17 +20,16 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: 📦 安装依赖
+    - name: 📦 安装依赖  # ← 这里修复了！
       run: |
         pip install --upgrade pip
-        pip install requests
+        pip install requests schedule  # ← 添加 schedule
 
     - name: 🚀 执行签到
       env:
         LOOMI_EMAIL: ${{ secrets.LOOMI_EMAIL }}
         LOOMI_PASSWORD: ${{ secrets.LOOMI_PASSWORD }}
-      run: |
-        python loomi_pro.py
+      run: python loomi_pro.py
 
     - name: 📝 上传日志
       if: always()
