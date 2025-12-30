@@ -1,42 +1,46 @@
-name: 🌅 Loomi 每日签到
+name: 🌅 Loomi 每日签到 + TG/PushPlus通知
 
 on:
   schedule:
-    # 每天 UTC 1:00 (北京时间 09:00)
+    # 每天北京时间09:00 (UTC 01:00)
     - cron: '0 1 * * *'
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
 
 jobs:
   signin:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     
     steps:
     - name: 📥 检出代码
       uses: actions/checkout@v4
 
-    - name: 🐍 设置 Python
+    - name: 🐍 设置 Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: 📦 安装依赖  # ← 这里修复了！
+    - name: 📦 安装依赖
       run: |
         pip install --upgrade pip
-        pip install requests schedule  # ← 添加 schedule
+        pip install requests
 
-    - name: 🚀 执行签到
+    - name: 🚀 执行签到 + 通知
       env:
         LOOMI_EMAIL: ${{ secrets.LOOMI_EMAIL }}
         LOOMI_PASSWORD: ${{ secrets.LOOMI_PASSWORD }}
+        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      # Telegram Bot Token
+        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # Telegram Chat ID
+        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # PushPlus Token
       run: python loomi_pro.py
 
-    - name: 📝 上传日志
+    - name: 📊 保存积分报告和日志
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: loomi-logs-${{ github.run_number }}
+        name: loomi-report-${{ github.run_number }}
         path: |
+          credits_report.txt
           loomi.log
           tokens.json
-        retention-days: 30
+        retention-days: 30  # 保存30天历史记录
