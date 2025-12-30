@@ -29,12 +29,12 @@ jobs:
       env:
         LOOMI_EMAIL: ${{ secrets.LOOMI_EMAIL }}
         LOOMI_PASSWORD: ${{ secrets.LOOMI_PASSWORD }}
-        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      # Telegram Bot Token
-        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # Telegram Chat ID
-        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # PushPlus Token
+        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
       run: python loomi_pro.py
 
-    - name: 📊 保存积分报告和日志
+    - name: 📊 保存完整报告
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -43,4 +43,4 @@ jobs:
           credits_report.txt
           loomi.log
           tokens.json
-        retention-days: 30  # 保存30天历史记录
+        retention-days: 30
