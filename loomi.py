@@ -42,7 +42,6 @@ class LoomiNotifier:
 class LoomiClient:
     def __init__(self):
         self.token = os.getenv("LOOMI_TOKEN")
-        # 固定配置 (来自抓包)
         self.api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cGN6dnd5Z2VscnZ4emZkY2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4OTU3ODUsImV4cCI6MjA2NTQ3MTc4NX0.y7uP6NVj48UAKnMWcB_5LltTVCVFuSeo7xmrCEHlp1I"
         self.headers = {
             "apikey": self.api_key,
@@ -58,57 +57,54 @@ class LoomiClient:
 
         print("🔄 正在连接 Loomi...")
         
-        email = "未知用户"
-        credits = 0
+        available = 0
+        total = 0
         status_msg = "初始化"
 
         try:
-            # 1. 获取 User ID (必须步骤)
+            # 1. 获取用户信息 (为了拿到ID)
             user_url = "https://auth.loomi.live/auth/v1/user"
             user_resp = requests.get(user_url, headers=self.headers, timeout=15)
             
             if user_resp.status_code == 200:
                 user_data = user_resp.json()
                 user_id = user_data.get('id')
-                email = user_data.get('email', email)
-                print(f"✅ 认证成功: {email}")
+                print(f"✅ 认证成功")
                 
-                # 2. 使用 p_user_id 获取积分 (关键步骤)
+                # 2. 获取积分
                 rpc_url = "https://auth.loomi.live/rest/v1/rpc/get_user_current_credits"
-                payload = {
-                    "p_user_id": user_id  # <--- 这里就是我们要修复的关键参数
-                }
+                payload = {"p_user_id": user_id}
                 
-                # RPC 必须用 POST
                 credit_resp = requests.post(rpc_url, headers=self.headers, json=payload, timeout=15)
                 
                 if credit_resp.status_code == 200:
-                    credits = credit_resp.json()
-                    status_msg = "🟢 数据获取成功"
-                    print(f"💰 当前真实积分: {credits}")
+                    raw_data = credit_resp.json()
+                    if isinstance(raw_data, list) and len(raw_data) > 0:
+                        data = raw_data[0]
+                        available = data.get('available_credits', 0)
+                        total = data.get('total_credits', 0)
+                        status_msg = "🟢 获取成功"
+                        print(f"💰 积分详情: 可用 {available} | 总计 {total}")
+                    else:
+                        status_msg = "⚠️ 数据格式异常"
                 else:
-                    status_msg = f"🔴 积分接口错误 {credit_resp.status_code}"
-                    print(f"❌ 获取积分失败: {credit_resp.text}")
+                    status_msg = f"🔴 接口错误 {credit_resp.status_code}"
             else:
-                status_msg = f"🔴 Token无效或过期 ({user_resp.status_code})"
-                print("❌ 无法获取用户信息，请检查 LOOMI_TOKEN 是否过期")
+                status_msg = f"🔴 Token过期 ({user_resp.status_code})"
 
         except Exception as e:
-            status_msg = f"🔴 脚本执行出错: {str(e)}"
+            status_msg = f"🔴 脚本出错: {str(e)}"
             print(status_msg)
 
-        # 3. 发送通知
-        now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # 3. 发送精简版通知
         msg = f"""
-📅 <b>时间</b>: {now_time}
-📧 <b>账号</b>: {email}
-
-💰 <b>当前积分</b>: <code>{credits}</code>
+💰 <b>可用积分</b>: <code>{available}</code>
+💎 <b>总计积分</b>: <code>{total}</code>
 
 📝 <b>状态</b>: {status_msg}
         """
         
-        # 保存报告文件 (供 GitHub Actions 下载)
+        # 写入报告
         with open("credits_report.txt", "w", encoding="utf-8") as f:
             f.write(msg)
             
