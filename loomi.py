@@ -1,138 +1,88 @@
 import requests
 import os
 import logging
+import json
 from datetime import datetime
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler('loomi.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class LoomiNotifier:
-    @staticmethod
-    def send_telegram(title, message):
-        bot_token = os.getenv("TG_BOT_TOKEN")
-        chat_id = os.getenv("TG_CHAT_ID")
-        if not bot_token or not chat_id:
-            logger.info("📱 TG: 未配置")
-            return False
+class LoomiClient:
+    def __init__(self):
+        # 从环境变量获取 Token (Bearer 后面那一大串)
+        self.token = os.getenv("LOOMI_TOKEN")
         
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        data = {
-            "chat_id": chat_id,
-            "text": f"{title}\n\n{message}",
-            "parse_mode": "HTML"
-        }
-        try:
-            resp = requests.post(url, data=data, timeout=15)
-            logger.info(f"📱 TG通知: {resp.status_code}")
-            return resp.status_code == 200
-        except:
-            return False
-    
-    @staticmethod
-    def send_pushplus(title, content):
-        token = os.getenv("PUSHPLUS_TOKEN")
-        if not token:
-            logger.info("📲 PushPlus: 未配置")
-            return False
+        # 这是从你提供的抓包数据中提取的固定配置
+        self.project_ref = "evpczvwygelrvxzfdcgv"
+        self.api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cGN6dnd5Z2VscnZ4emZkY2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4OTU3ODUsImV4cCI6MjA2NTQ3MTc4NX0.y7uP6NVj48UAKnMWcB_5LltTVCVFuSeo7xmrCEHlp1I"
         
-        url = "http://www.pushplus.plus/send"
-        data = {
-            "token": token,
-            "title": title,
-            "content": content,
-            "template": "html"
+        # 构造请求头
+        self.headers = {
+            "apikey": self.api_key,
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+            "x-client-info": "supabase-js-web/2.50.0"
         }
+
+    def get_real_data(self):
+        if not self.token:
+            print("❌ 错误：未设置 LOOMI_TOKEN 环境变量")
+            return
+
+        print("🔄 正在连接 Loomi (Supabase)...")
+
+        # 1. 获取用户基础信息 (为了拿到 User ID)
+        user_url = "https://auth.loomi.live/auth/v1/user"
         try:
-            resp = requests.post(url, data=data, timeout=15)
-            logger.info(f"📲 PushPlus: {resp.status_code}")
-            return "成功" in resp.text
-        except:
-            return False
+            resp = requests.get(user_url, headers=self.headers, timeout=10)
+            if resp.status_code != 200:
+                print(f"❌ Token可能已过期，状态码: {resp.status_code}")
+                return
+            
+            user_data = resp.json()
+            user_id = user_data.get('id')
+            email = user_data.get('email')
+            print(f"👤 用户认证成功: {email} (ID: {user_id})")
 
-def create_resilient_session():
-    """创建抗超时Session"""
-    session = requests.Session()
-    retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"]
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=5, pool_maxsize=5)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
+        except Exception as e:
+            print(f"❌ 连接认证服务器失败: {e}")
+            return
 
-def loomi_signin():
-    """超稳定签到 - 防超时"""
-    email = os.getenv("LOOMI_EMAIL", "unknown@example.com")
-    
-    # 你页面显示的真实积分
-    available = 4050
-    total = 4050
-    
-    service_status = "🟡 未检查"
-    
-    # 健康检查 - 超长超时 + 重试
-    session = create_resilient_session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-    
-    try:
-        # 先检查主域名
-        resp = session.get("https://loomi.live", headers=headers, timeout=30)
-        if resp.status_code == 200:
-            service_status = "🟢 服务正常"
-        else:
-            service_status = f"🟡 主站{resp.status_code}"
-    except:
-        service_status = "🔴 网络超时"
-    
-    # 通知消息
-    signin_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    success_msg = f"""
-<b>🎉 Loomi每日签到完成！</b>
-
-💰 <b>可用积分</b>: <code>{available:,}</code>
-💎 <b>总积分</b>: <code>{total:,}</code>
-📅 <b>签到时间</b>: {signin_time}
-📧 <b>账号</b>: {email}
-{service_status}
-
-<i>GitHub Actions 自动签到 ✓</i>
-    """
-    
-    # 发送通知
-    notifier = LoomiNotifier()
-    notifier.send_telegram("✅ Loomi签到成功", success_msg)
-    notifier.send_pushplus("✅ Loomi签到成功", success_msg)
-    
-    # 输出结果
-    print(success_msg)
-    logger.info(f"🎉 签到完成 | 服务: {service_status}")
-    
-    # 保存报告
-    report = f"Loomi签到报告\n\n{success_msg}\n服务状态: {service_status}"
-    with open("credits_report.txt", "w", encoding="utf-8") as f:
-        f.write(report)
-    
-    return True
+        # 2. 尝试从数据库获取积分
+        # Supabase 的标准数据查询接口是 /rest/v1/表名
+        # 我们猜测表名为 'profiles' (这是 Supabase 最常见的用户信息表名)
+        db_url = f"https://{self.project_ref}.supabase.co/rest/v1/profiles?select=*"
+        
+        try:
+            # 请求数据库
+            db_resp = requests.get(db_url, headers=self.headers, timeout=10)
+            
+            if db_resp.status_code == 200:
+                profiles = db_resp.json()
+                if profiles and len(profiles) > 0:
+                    profile = profiles[0]
+                    
+                    # --- 自动寻找积分字段 ---
+                    # 常见的积分字段名：credits, points, balance, token
+                    credits = profile.get('credits') or profile.get('points') or profile.get('balance') or 0
+                    
+                    # 打印结果
+                    print("\n" + "="*30)
+                    print(f"💰 真实积分: {credits}")
+                    print(f"📊 完整数据: {json.dumps(profile, ensure_ascii=False)}")
+                    print("="*30 + "\n")
+                    
+                    # 这里你可以添加发送通知的逻辑
+                else:
+                    print("⚠️ 获取到了 profiles 表，但数据为空。可能表名不对。")
+            else:
+                print(f"⚠️ 无法读取 profiles 表 (状态码 {db_resp.status_code})")
+                print("可能是表名不是 'profiles'，或者权限不足。")
+                
+        except Exception as e:
+            print(f"❌ 查询数据库失败: {e}")
 
 if __name__ == "__main__":
-    if os.getenv('GITHUB_ACTIONS'):
-        loomi_signin()
-        print("✅ 工作流完成 - 检查手机通知")
-        exit(0)  # 始终绿色成功
-    else:
-        print("=== LOOMI签到测试版 ===")
-        loomi_signin()
+    client = LoomiClient()
+    client.get_real_data()
