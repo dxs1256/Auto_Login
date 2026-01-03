@@ -1,0 +1,33 @@
+name: Cleanup-Old-History
+
+on:
+  workflow_dispatch:  # 支持手动点击运行
+  schedule:
+    - cron: 0 3 * * * # 每天自动运行
+
+# 关键：必须显式开启写权限，否则别的仓库可能会报错 403
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  Cleaning:
+    runs-on: ubuntu-latest
+    steps:
+      # 删除旧的工作流运行记录
+      - name: Delete Old Workflow Runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 3
+          keep_minimum_runs: 2
+
+      # 删除旧的 Release 发布包
+      - name: Delete Old Releases
+        uses: dev-drprasad/delete-older-releases@master
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
