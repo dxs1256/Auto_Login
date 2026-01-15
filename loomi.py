@@ -70,12 +70,10 @@ class LoomiClient:
     def check_in(self, user_id):
         """执行每日签到 RPC"""
         print("🔄 正在执行每日签到...")
-        # 根据 JS 代码，RPC 调用路径通常如下
         checkin_url = "https://auth.loomi.live/rest/v1/rpc/handle_daily_login_reward"
         payload = {"user_uuid": user_id}
         
         try:
-            # 签到接口通常需要 Authorization 头
             self.headers["Authorization"] = f"Bearer {self.token}"
             resp = requests.post(checkin_url, headers=self.headers, json=payload, timeout=15)
             
@@ -83,8 +81,10 @@ class LoomiClient:
                 print("✅ 签到操作成功！")
                 return "成功领取"
             else:
-                # 常见错误：今日已签到
                 error_msg = resp.json().get('message', '未知错误')
+                # 有些系统如果是重复签到，会返回特定错误，这里视为今日已完成
+                if "already" in error_msg or "Duplicate" in error_msg: 
+                    return "今日已签"
                 print(f"ℹ️ 签到反馈: {error_msg}")
                 return f"未增加 ({error_msg})"
         except Exception as e:
@@ -104,7 +104,7 @@ class LoomiClient:
         status_msg = "未知"
 
         try:
-            # 2. 获取 User ID (这是签到 RPC 必须的参数)
+            # 2. 获取 User ID
             user_resp = requests.get("https://auth.loomi.live/auth/v1/user", headers=self.headers, timeout=15)
             if user_resp.status_code != 200:
                 print("❌ 获取用户信息失败，Token 可能无效")
@@ -118,17 +118,34 @@ class LoomiClient:
             # 3. 执行签到
             checkin_status = self.check_in(user_id)
 
-            # 4. 查询最终积分 (使用之前日志里看到的查询方式)
-            # 这里尝试你代码里的 get_user_current_credits，如果失效可以换成查询 user_credits 表
+            # 4. 查询积分 (关键修改部分)
             print("🔄 正在查询积分余额...")
-            # 备选方案：直接从 user_credits 表查询
             credit_url = f"https://auth.loomi.live/rest/v1/user_credits?user_id=eq.{user_id}&select=*"
             credit_resp = requests.get(credit_url, headers=self.headers, timeout=15)
             
             if credit_resp.status_code == 200:
                 credits_data = credit_resp.json()
                 if credits_data:
-                    available = credits_data[0].get('total_credits', 0) # 或者是 available_credits
+                    data_row = credits_data[0]
+                    
+                    # === 🛠️ 调试：打印所有字段，帮你找到正确的余额字段 ===
+                    print(f"\n🔍 [调试] API 返回的完整积分数据: {json.dumps(data_row, indent=2)}")
+                    
+                    # 尝试优先读取 'credits' (通常是余额)，其次读取 'monthly_credits'，最后才是 'total_credits'
+                    if 'credits' in data_row:
+                        available = data_row['credits']
+                        print("👉 采用了 'credits' 字段作为余额")
+                    elif 'plan_credits' in data_row and 'purchased_credits' in data_row:
+                        # 某些系统余额 = 套餐积分 + 购买积分
+                         available = data_row.get('plan_credits', 0) + data_row.get('purchased_credits', 0)
+                         print("👉 采用了 'plan_credits + purchased_credits' 计算余额")
+                    else:
+                        # 如果都没有，尝试减法：总获得 - 总使用
+                        total = data_row.get('total_credits', 0)
+                        used = data_row.get('used_credits', 0) # 假设有 usage 字段
+                        available = total - used if used else total
+                        print(f"👉 采用了计算逻辑: 总计({total}) - 已用({used}) = {available}")
+                    
                     status_msg = "🟢 正常"
                 else:
                     status_msg = "⚠️ 找不到积分记录"
@@ -145,7 +162,7 @@ class LoomiClient:
 📅 <b>时间</b>: <code>{now}</code>
 👤 <b>账号</b>: <code>{self.email or 'Token模式'}</code>
 📝 <b>签到状态</b>: <b>{checkin_status}</b>
-💰 <b>当前积分</b>: <code>{available}</code>
+💰 <b>当前余额</b>: <code>{available}</code>
 📊 <b>系统状态</b>: {status_msg}
         """
         
