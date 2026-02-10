@@ -31,7 +31,7 @@ jobs:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        LOOMI_TOKEN: ${{ secrets.LOOMI_TOKEN }}
+        LOOMI_REFRESH_TOKEN: ${{ secrets.LOOMI_REFRESH_TOKEN }}
       run: python loomi.py  # 👈 修改这里！
 
     - name: 📊 保存完整报告
