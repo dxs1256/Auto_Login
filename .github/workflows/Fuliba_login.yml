@@ -2,7 +2,7 @@ name: 福利吧自动签到
 
 on:
   schedule:
-    - cron: '0 16 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
+    - cron: '0 16,18 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
   workflow_dispatch:
 
 jobs:
