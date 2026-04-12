@@ -45,23 +45,19 @@ def send_pushplus(message):
         return
 
     url = "http://www.pushplus.plus/send"
-    
-    # PushPlus 的 html 模板中，需要用 <br> 换行
-    # 将原始消息中的换行符替换为 HTML 换行标签
     content = message.replace("\n", "<br>")
 
     payload = {
         "token": token,
         "title": "Wispbyte 保活通知",
         "content": content,
-        "template": "html",  # 使用 html 模板以兼容 <b> 等标签
-        "channel": "wechat"  # 默认发送到微信
+        "template": "html",
+        "channel": "wechat"
     }
 
     try:
         r = requests.post(url, json=payload, timeout=10)
         if r.status_code == 200:
-            # PushPlus 即使请求成功也可能返回错误码（如token错误），简单检查一下响应体
             resp_json = r.json()
             if resp_json.get("code") == 200:
                 log("✅ PushPlus 通知已发送")
@@ -75,22 +71,17 @@ def send_pushplus(message):
 # 单个账号保活逻辑
 def check_one_account(index, cookie):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/120.0.0.0",
         "Cookie": cookie.strip(),
         "Referer": "https://wispbyte.com/client"
     }
     
-    proxies = None
-    proxy_url = os.getenv("SOCKS5_PROXY")
-    if proxy_url:
-        proxies = {"http": f"socks5://{proxy_url}", "https": f"socks5://{proxy_url}"}
-
     s = requests.Session()
     s.headers.update(headers)
-    s.proxies = proxies
 
     try:
         log(f"正在检查第 {index} 个账号...")
+        # 直接发起网络请求，不再经过任何代理
         r = s.get("https://wispbyte.com/client", timeout=20, allow_redirects=True)
         
         # 成功判断
