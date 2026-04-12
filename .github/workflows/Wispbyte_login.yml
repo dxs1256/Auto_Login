@@ -21,17 +21,15 @@ jobs:
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
-          # 下面这行是修复报错的关键：同时安装 requests 和 pysocks
-          pip install requests pysocks
+          # 不再需要 pysocks，只留 requests
+          pip install requests
 
       - name: 执行保活
         env:
-          # 必须在这里把 Secrets 映射给 Python 环境变量
           WISPBYTE_COOKIE_STRING: ${{ secrets.WISPBYTE_COOKIE_STRING }}
-          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}   # <--- 新增这行
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}       # <--- 新增这行
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # 👈 必须加上这一行
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python -u wispbyte.py
 
       - name: Telegram 报警
