@@ -1,46 +1,59 @@
 /*
- 火烧云概率监控脚本 v2.30
- 功能：监控日出日落火烧云概率，支持美化版企业微信和Telegram通知
+ 火烧云概率监控脚本 v2.50
+ 功能：监控日出日落火烧云概率，支持扁平化企业微信与仪表盘级Telegram通知
+ 更新时间：2026-04-21
+ 改动：重构消息排版机制，解决企业微信解析异常问题，提升TG端数据美观度
 */
 
 const axios = require('axios');
 
 // ==================== 配置区 ====================
+// 基础配置
 const CITY = process.env.SUNSET_CITY || '广东省-深圳';
 const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5');
 const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS'];
-const EVENTS = ['set_1', 'set_2', 'rise_1']; // 常用：今天落日、明天落日、明天日出
-const TIMEZONE = process.env.TIMEZONE || 'CST'; 
+const EVENTS = ['set_1', 'set_2', 'rise_1']; // 常用: set_1今天落日, set_2明天落日, rise_1明天日出
+const TIMEZONE = process.env.SUNSET_TIMEZONE || 'Asia/Shanghai'; 
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 2000;
-const QUERY_DELAY = 1000;
+// 重试配置
+const MAX_RETRIES = parseInt(process.env.SUNSET_MAX_RETRIES || '3', 10);
+const RETRY_DELAY = parseInt(process.env.SUNSET_RETRY_DELAY || '2000', 10); // ms
+const QUERY_DELAY = parseInt(process.env.SUNSET_QUERY_DELAY || '1000', 10); // 请求间隔 ms
 
+// 通道配置 (为空则不发送)
 const WX_WEBHOOK_URL = process.env.WX_WEBHOOK_URL || '';
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN || '';
 const TG_CHAT_ID = process.env.TG_CHAT_ID || '';
 
-// ==================== 常量与工具 ====================
+// ==================== 常量定义 ====================
+const API_BASE = 'https://sunsetbot.top/';
+
 const EVENT_NAMES = {
-  'set_1': '今天落日 Today Sunset',
-  'set_2': '明天落日 Tomorrow Sunset',
-  'rise_1': '明天日出 Tomorrow Sunrise',
-  'rise_2': '后天日出 Next Day Sunrise'
+  'set_1': '今天落日',
+  'set_2': '明天落日',
+  'rise_1': '明天日出',
+  'rise_2': '后天日出'
 };
 
 const QUALITY_LEVELS = {
-  excellent: { threshold: 0.8, text: '极佳', emoji: '🔥', color: 'warning' },
-  good: { threshold: 0.6, text: '很好', emoji: '✨', color: 'warning' },
-  normal: { threshold: 0.4, text: '一般', emoji: '☀️', color: 'info' },
-  poor: { threshold: 0.2, text: '较差', emoji: '🌤️', color: 'comment' },
-  none: { threshold: 0, text: '不烧', emoji: '❌', color: 'comment' }
+  excellent: { threshold: 0.8, text: '极佳', emoji: '🔥', color: 'warning', desc: '绝对值得出门观赏！' },
+  good: { threshold: 0.6, text: '很好', emoji: '✨', color: 'warning', desc: '非常适合观赏，不要错过' },
+  normal: { threshold: 0.4, text: '一般', emoji: '☀️', color: 'info', desc: '可以碰碰运气' },
+  poor: { threshold: 0.2, text: '较差', emoji: '🌤️', color: 'comment', desc: '大概率不烧，随缘' },
+  none: { threshold: 0, text: '不烧', emoji: '❌', color: 'comment', desc: '洗洗睡吧' }
 };
 
-// 生成进度条
-function getProgressBar(quality) {
-  const total = 10;
-  const active = Math.round(quality * total);
-  return '█'.repeat(active) + '░'.repeat(total - active);
+let todaySunsetNotified = false;
+
+// ==================== 工具函数 ====================
+function generateQueryId() {
+  return Math.floor(1000000 + Math.random() * 9000000).toString();
+}
+
+function parseQuality(qualityStr) {
+  if (!qualityStr) return 0;
+  const match = qualityStr.match(/[\d.]+/);
+  return match ? parseFloat(match[0]) : 0;
 }
 
 function getQualityInfo(quality) {
@@ -53,114 +66,126 @@ function getQualityInfo(quality) {
 
 function getAodInfo(aod) {
   const val = parseFloat(aod);
-  if (val < 0.15) return { text: '极纯净', emoji: '💎' };
-  if (val < 0.3) return { text: '良好', emoji: '🌿' };
-  return { text: '浑浊', emoji: '🌫️' };
+  if (val < 0.15) return { text: '优', emoji: '💎' };  // 空气极其通透
+  if (val < 0.3) return { text: '良', emoji: '🌿' };   // 空气一般
+  return { text: '差', emoji: '🌫️' };                 // 空气浑浊
 }
 
-// -------------------- 企业微信排版优化 --------------------
+function groupByEvent(results) {
+  const groups = {};
+  results.forEach(r => {
+    if (!groups[r.event]) groups[r.event] = [];
+    groups[r.event].push(r);
+  });
+  return groups;
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ==================== 核心排版逻辑 ====================
+
+// 1. 企业微信排版 (扁平化无嵌套设计，适配微信特殊Markdown)
 function formatForWeCom(results, city) {
   let content = `## 🌅 火烧云预报 · ${city}\n`;
-  content += `> 监测到共有 **${results.length}** 个模型概率超过阈值 (${THRESHOLD})\n\n`;
+  content += `监测到 **${results.length}** 个模型超过预警阈值 (${THRESHOLD})\n\n`;
 
   const groups = groupByEvent(results);
 
   for (const event in groups) {
     content += `### 📅 ${EVENT_NAMES[event] || event}\n`;
+    
     groups[event].forEach(item => {
       const q = getQualityInfo(item.quality);
       const a = getAodInfo(item.tb_aod);
-      const progress = getProgressBar(item.quality);
-      const timeStr = item.tb_event_time.split(' ')[1] || item.tb_event_time; // 只取时间部分
+      // 提取纯时间 (例如 2026-04-22 19:10:05 -> 19:10)
+      const timeStr = item.tb_event_time.split(' ')[1]?.slice(0, 5) || item.tb_event_time;
 
-      content += `> **模型：${item.model}**\n`;
-      content += `> 概率：<font color="${q.color}">${q.emoji} ${q.text} ${(item.quality * 100).toFixed(0)}%</font>\n`;
-      content += `> 进度：\`${progress}\`\n`;
-      content += `> 时间：\`${timeStr}\` | AOD：${a.emoji}${a.text}\n`;
-      content += `>\n`;
+      content += `🔹 模型: **${item.model}** | 概率: <font color="${q.color}">${q.text} ${Math.round(item.quality * 100)}%</font>\n`;
+      content += `⏰ 时间: ${timeStr} | 💨 AOD: ${a.emoji}${a.text} (${parseFloat(item.tb_aod).toFixed(2)})\n`;
+      content += `💡 建议: ${q.emoji} ${q.desc}\n\n`;
     });
   }
-
-  content += `--- \n`;
-  content += `<font color="comment">数据更新于：${new Date().toLocaleString('zh-CN')} | SunsetBot</font>`;
+  
+  content += `--- \n<font color="comment">数据来源: sunsetbot.top | ${new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE })}</font>`;
   return content;
 }
 
-// -------------------- Telegram 排版优化 --------------------
+// 2. Telegram排版 (等宽代码块与HTML混合的仪表盘设计)
 function formatForTelegram(results, city) {
   let content = `<b>🌅 火烧云预报 · ${city}</b>\n`;
-  content += `<code>Threshold: ${THRESHOLD}</code>\n\n`;
+  content += `<code>预警阈值: ${THRESHOLD} | 共 ${results.length} 条高概率</code>\n`;
 
   const groups = groupByEvent(results);
 
   for (const event in groups) {
-    content += `<b>────── ${EVENT_NAMES[event] || event} ──────</b>\n`;
+    content += `\n<b>📅 ${EVENT_NAMES[event] || event}</b>\n`;
+    
     groups[event].forEach(item => {
       const q = getQualityInfo(item.quality);
       const a = getAodInfo(item.tb_aod);
-      const progress = getProgressBar(item.quality);
+      // 提取时间包含秒，更具科技感
       const timeStr = item.tb_event_time.split(' ')[1] || item.tb_event_time;
 
-      content += `<b>${item.model} Model</b> ${q.emoji}\n`;
-      content += `<code>[${progress}] ${(item.quality * 100).toFixed(0)}%</code>\n`;
-      content += `✨ 质量: <b>${q.text}</b>\n`;
-      content += `⏰ 时间: <code>${timeStr}</code>\n`;
-      content += `💨 AOD : <code>${item.tb_aod} (${a.text})</code>\n\n`;
+      content += `<code>────────────────────────</code>\n`;
+      content += `<b>${item.model} 模型</b>   概率: <code>${Math.round(item.quality * 100)}% ${q.emoji}</code>\n`;
+      content += `<b>评级:</b> <code>${q.text}</code>  <b>AOD:</b> <code>${parseFloat(item.tb_aod).toFixed(3)} ${a.emoji}</code>\n`;
+      content += `<b>时间:</b> <code>${timeStr}</code>\n`;
     });
   }
-
-  content += `🔗 <i>Data Source: SunsetBot.top</i>`;
+  
+  content += `\n<code>────────────────────────</code>\n`;
+  content += `<i>🔗 sunsetbot.top | ${new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE })}</i>`;
   return content;
 }
 
-// -------------------- 逻辑处理工具 --------------------
-
-function groupByEvent(results) {
-  return results.reduce((acc, curr) => {
-    if (!acc[curr.event]) acc[curr.event] = [];
-    acc[curr.event].push(curr);
-    return acc;
-  }, {});
-}
-
-function parseQuality(qualityStr) {
-  if (!qualityStr) return 0;
-  const match = qualityStr.match(/[\d.]+/);
-  return match ? parseFloat(match[0]) : 0;
-}
-
-async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ==================== 数据查询 ====================
 
 async function querySunsetDataWithRetry(city, event, model, retryCount = 0) {
-  const queryId = Math.floor(1000000 + Math.random() * 9000000).toString();
-  const url = `https://sunsetbot.top/?query_id=${queryId}&intend=select_city&query_city=${encodeURIComponent(city)}&event_date=None&event=${event}&times=None&model=${model}`;
+  const queryId = generateQueryId();
+  const encodedCity = encodeURIComponent(city);
+  const url = `${API_BASE}?query_id=${queryId}&intend=select_city&query_city=${encodedCity}&event_date=None&event=${event}&times=None&model=${model}`;
 
   try {
+    console.log(`  📡 [${model}-${EVENT_NAMES[event]}] 第${retryCount + 1}次查询...`);
     const response = await axios.get(url, {
-      headers: { 'user-agent': 'Mozilla/5.0', 'x-requested-with': 'XMLHttpRequest' },
-      timeout: 10000
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      timeout: 15000
     });
-    if (response.data && response.data.status === 'ok') return response.data;
-    if (retryCount < MAX_RETRIES) {
-      await sleep(RETRY_DELAY);
-      return querySunsetDataWithRetry(city, event, model, retryCount + 1);
+
+    if (response.data && response.data.status === 'ok') {
+      return response.data;
     }
-    return null;
+
+    throw new Error('返回状态异常或数据为空');
   } catch (error) {
-    if (retryCount < MAX_RETRIES) {
+    if (retryCount < MAX_RETRIES - 1) {
+      console.log(`  ⚠️ [${model}-${EVENT_NAMES[event]}] ${error.message}，${RETRY_DELAY/1000}秒后重试...`);
       await sleep(RETRY_DELAY);
       return querySunsetDataWithRetry(city, event, model, retryCount + 1);
     }
+    console.log(`  ❌ [${model}-${EVENT_NAMES[event]}] 查询失败 (已重试${MAX_RETRIES}次): ${error.message}`);
     return null;
   }
 }
+
+// ==================== 发送通道 ====================
 
 async function sendWeChat(content) {
   if (!WX_WEBHOOK_URL) return;
   try {
-    await axios.post(WX_WEBHOOK_URL, { msgtype: "markdown", markdown: { content } });
-    console.log('✅ WeCom Sent');
-  } catch (e) { console.error('❌ WeCom Fail', e.message); }
+    await axios.post(WX_WEBHOOK_URL, {
+      msgtype: "markdown",
+      markdown: { content }
+    });
+    console.log('✅ 企业微信通知推送成功');
+  } catch (e) {
+    console.log(`⚠️ 企业微信发送失败: ${e.message}`);
+  }
 }
 
 async function sendTelegram(content) {
@@ -172,41 +197,78 @@ async function sendTelegram(content) {
       parse_mode: 'HTML',
       disable_web_page_preview: true
     });
-    console.log('✅ Telegram Sent');
-  } catch (e) { console.error('❌ TG Fail', e.message); }
+    console.log('✅ Telegram 通知推送成功');
+  } catch (e) {
+    console.log(`⚠️ Telegram 发送失败: ${e.message}`);
+  }
 }
 
-// -------------------- 执行入口 --------------------
+// ==================== 主程序入口 ====================
+
 async function main() {
-  console.log(`🚀 Start Monitoring: ${CITY}...`);
+  console.log('\n==================== 火烧云监控启动 ====================');
+  console.log(`📍 城市: ${CITY} | 🔔 阈值: ${THRESHOLD} | ⏰ 时区: ${TIMEZONE}`);
+  console.log(`📊 模型: ${MODELS.join(', ')} | 📅 事件: ${EVENTS.map(e => EVENT_NAMES[e]).join(', ')}`);
+  
+  if (WX_WEBHOOK_URL) console.log('🔔 企业微信通知: 已启用');
+  if (TG_BOT_TOKEN) console.log('✈️ Telegram通知: 已启用');
+  console.log('--------------------------------------------------------');
+
   const notifyResults = [];
 
   for (const model of MODELS) {
     for (const event of EVENTS) {
       const data = await querySunsetDataWithRetry(CITY, event, model);
+
       if (data) {
         const quality = parseQuality(data.tb_quality);
+        const qInfo = getQualityInfo(quality);
+
+        console.log(`  ✅ 成功 -> 概率: ${quality} (${qInfo.text}) | 时间: ${data.tb_event_time} | AOD: ${data.tb_aod}`);
+
         if (quality >= THRESHOLD) {
-          notifyResults.push({
-            model, event, quality,
-            tb_quality: data.tb_quality,
-            tb_event_time: data.tb_event_time,
-            tb_aod: data.tb_aod
-          });
+          if (event === 'set_1' && todaySunsetNotified) {
+            console.log(`  ⏭️ "今天落日"已达标过，跳过重复预警`);
+          } else {
+            console.log(`  🎯 达标！加入推送队列`);
+            notifyResults.push({
+              model, event, quality,
+              tb_quality: data.tb_quality,
+              tb_event_time: data.tb_event_time,
+              tb_aod: data.tb_aod
+            });
+            if (event === 'set_1') todaySunsetNotified = true;
+          }
+        } else {
+          console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
         }
       }
-      await sleep(QUERY_DELAY);
+
+      if (QUERY_DELAY > 0) await sleep(QUERY_DELAY);
     }
   }
 
+  console.log('\n======================== 数据汇总 ========================');
+  console.log(`📊 共筛选出 ${notifyResults.length} 条高概率数据`);
+
   if (notifyResults.length > 0) {
-    const wxMsg = formatForWeCom(notifyResults, CITY);
-    const tgMsg = formatForTelegram(notifyResults, CITY);
-    await sendWeChat(wxMsg);
-    await sendTelegram(tgMsg);
+    console.log('📱 正在推送至各个终端...');
+    
+    if (WX_WEBHOOK_URL) {
+      const wxContent = formatForWeCom(notifyResults, CITY);
+      await sendWeChat(wxContent);
+    }
+
+    if (TG_BOT_TOKEN && TG_CHAT_ID) {
+      const tgContent = formatForTelegram(notifyResults, CITY);
+      await sendTelegram(tgContent);
+    }
+    
   } else {
-    console.log('💤 No high probability detected.');
+    console.log('💤 当日无惊艳天象预警，不发送推送骚扰');
   }
+
+  console.log('==================== 本次监控结束 ====================\n');
 }
 
 main().catch(console.error);
