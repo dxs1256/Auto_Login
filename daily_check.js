@@ -181,8 +181,6 @@ function groupByEvent(results) {
 
 function formatForWeCom(results, city) {
   const lines = [];
-  lines.push(`🌅 <u><b>${city} 火烧云预警</b></u>`);
-  lines.push('');
   lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
   lines.push('');
 
@@ -191,19 +189,17 @@ function formatForWeCom(results, city) {
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     lines.push(`📆 <b>${eventName}</b>`);
-    lines.push('');
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'wecom');
       const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
 
       lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${item.qualityText}</font> (${data.quality.toFixed(3)})`);
+      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${item.qualityText}</font> (${data.quality.toFixed(3)}) | 💡 ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
       lines.push(`   ⏰ 时间: ${item.eventTime}`);
-      lines.push(`   💡 ${item.qualityDesc}`);
-      lines.push('');
     });
+    lines.push('');
   });
 
   lines.push('--------------------');
@@ -214,8 +210,6 @@ function formatForWeCom(results, city) {
 
 function formatForTelegram(results, city) {
   const lines = [];
-  lines.push(`🌅 <u><b>${city} 火烧云预警</b></u>`);
-  lines.push('');
   lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
   lines.push('');
 
@@ -224,18 +218,16 @@ function formatForTelegram(results, city) {
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     lines.push(`📆 <b>${eventName}</b>`);
-    lines.push('');
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'tg');
 
       lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <b>${item.qualityText}</b> (${data.quality.toFixed(3)})`);
+      lines.push(`   ${item.qualityEmoji} 概率: <b>${item.qualityText}</b> (${data.quality.toFixed(3)}) | 💡 ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
       lines.push(`   ⏰ 时间: ${item.eventTime}`);
-      lines.push(`   💡 ${item.qualityDesc}`);
-      lines.push('');
     });
+    lines.push('');
   });
 
   lines.push('--------------------');
