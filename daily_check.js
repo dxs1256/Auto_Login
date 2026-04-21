@@ -88,56 +88,65 @@ function sleep(ms) {
 
 // 1. 企业微信排版 (扁平化无嵌套设计，适配微信特殊Markdown)
 function formatForWeCom(results, city) {
-  let content = `## 🌅 火烧云预报 · ${city}\n`;
-  content += `监测到 **${results.length}** 个模型超过预警阈值 (${THRESHOLD})\n\n`;
+  const lines = [];
+  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
+  lines.push('');
 
   const groups = groupByEvent(results);
 
-  for (const event in groups) {
-    content += `### 📅 ${EVENT_NAMES[event] || event}\n`;
-    
-    groups[event].forEach(item => {
-      const q = getQualityInfo(item.quality);
-      const a = getAodInfo(item.tb_aod);
-      // 提取纯时间 (例如 2026-04-22 19:10:05 -> 19:10)
-      const timeStr = item.tb_event_time.split(' ')[1]?.slice(0, 5) || item.tb_event_time;
+  Object.keys(eventGroups).forEach(event => {
+    const eventName = EVENT_NAMES[event] || event;
+    const firstData = eventGroups[event][0];
+    lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
-      content += `🔹 模型: **${item.model}** | 概率: <font color="${q.color}">${q.text} ${Math.round(item.quality * 100)}%</font>\n`;
-      content += `⏰ 时间: ${timeStr} | 💨 AOD: ${a.emoji}${a.text} (${parseFloat(item.tb_aod).toFixed(2)})\n`;
-      content += `💡 建议: ${q.emoji} ${q.desc}\n\n`;
+    eventGroups[event].forEach(data => {
+      const item = formatResultItem(data, 'wecom');
+      const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
+
+      lines.push(`🔹 <b>${item.model}</b>`);
+      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${item.qualityText}</font> | ${item.qualityDesc}`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
     });
-  }
-  
-  content += `--- \n<font color="comment">数据来源: sunsetbot.top | ${new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE })}</font>`;
-  return content;
+    lines.push('');
+  });
+
+  lines.push('--------------------');
+  const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
+  lines.push(`📨 推送时间: ${now}`);
+  lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
+
+  return lines.join('\n');
 }
 
 // 2. Telegram排版 (等宽代码块与HTML混合的仪表盘设计)
 function formatForTelegram(results, city) {
-  let content = `<b>🌅 火烧云预报 · ${city}</b>\n`;
-  content += `<code>预警阈值: ${THRESHOLD} | 共 ${results.length} 条高概率</code>\n`;
+  const lines = [];
+  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
+  lines.push('');
 
   const groups = groupByEvent(results);
 
-  for (const event in groups) {
-    content += `\n<b>📅 ${EVENT_NAMES[event] || event}</b>\n`;
-    
-    groups[event].forEach(item => {
-      const q = getQualityInfo(item.quality);
-      const a = getAodInfo(item.tb_aod);
-      // 提取时间包含秒，更具科技感
-      const timeStr = item.tb_event_time.split(' ')[1] || item.tb_event_time;
+  Object.keys(eventGroups).forEach(event => {
+    const eventName = EVENT_NAMES[event] || event;
+    const firstData = eventGroups[event][0];
+    lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
-      content += `<code>────────────────────────</code>\n`;
-      content += `<b>${item.model} 模型</b>   概率: <code>${Math.round(item.quality * 100)}% ${q.emoji}</code>\n`;
-      content += `<b>评级:</b> <code>${q.text}</code>  <b>AOD:</b> <code>${parseFloat(item.tb_aod).toFixed(3)} ${a.emoji}</code>\n`;
-      content += `<b>时间:</b> <code>${timeStr}</code>\n`;
+    eventGroups[event].forEach(data => {
+      const item = formatResultItem(data, 'tg');
+
+      lines.push(`🔹 <b>${item.model}</b>`);
+      lines.push(`   ${item.qualityEmoji} 概率: <b>${data.quality.toFixed(3)} ${item.qualityText}</b> | ${item.qualityDesc}`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
     });
-  }
-  
-  content += `\n<code>────────────────────────</code>\n`;
-  content += `<i>🔗 sunsetbot.top | ${new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE })}</i>`;
-  return content;
+    lines.push('');
+  });
+
+  lines.push('--------------------');
+  const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
+  lines.push(`📨 推送时间: ${now}`);
+  lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
+
+  return lines.join('\n');
 }
 
 // ==================== 数据查询 ====================
