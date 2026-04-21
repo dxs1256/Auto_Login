@@ -195,8 +195,8 @@ function formatForWeCom(results, city) {
       const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
 
       lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${item.qualityText}</font> (${data.quality.toFixed(3)}) | 💡 ${item.qualityDesc}`);
-      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
+      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${item.qualityText}</font> | ${item.qualityDesc}`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
       lines.push(`   ⏰ 时间: ${item.eventTime}`);
     });
     lines.push('');
@@ -223,8 +223,8 @@ function formatForTelegram(results, city) {
       const item = formatResultItem(data, 'tg');
 
       lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <b>${item.qualityText}</b> (${data.quality.toFixed(3)}) | 💡 ${item.qualityDesc}`);
-      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
+      lines.push(`   ${item.qualityEmoji} 概率: <b>${data.quality.toFixed(3)} ${item.qualityText}</b> | ${item.qualityDesc}`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
       lines.push(`   ⏰ 时间: ${item.eventTime}`);
     });
     lines.push('');
