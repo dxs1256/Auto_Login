@@ -66,9 +66,9 @@ function getQualityInfo(quality) {
 
 function getAodInfo(aod) {
   const val = parseFloat(aod);
-  if (val < 0.15) return { text: '优', emoji: '💎' };  // 空气极其通透
-  if (val < 0.3) return { text: '良', emoji: '🌿' };   // 空气一般
-  return { text: '差', emoji: '🌫️' };                 // 空气浑浊
+  if (val < 0.15) return { text: '优', emoji: '💎', desc: '空气极其通透' };
+  if (val < 0.3) return { text: '良', emoji: '🌿', desc: '空气一般' };
+  return { text: '差', emoji: '🌫️', desc: '空气浑浊' };
 }
 
 function groupByEvent(results) {
@@ -105,7 +105,7 @@ function formatForWeCom(results, city) {
 
       lines.push(`🔹 ${data.model}`);
       lines.push(`   ${qInfo.emoji} 观赏指数: ${qInfo.text} (${data.quality.toFixed(3)})  - ${qInfo.desc}`);
-      lines.push(`   🌬️ 空气质量: ${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)}) - ${aInfo.emoji === '💎' ? '空气极其通透' : aInfo.emoji === '🌿' ? '空气一般' : '空气浑浊'}`);
+      lines.push(`   🌬️ 空气质量: ${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)}) - ${aInfo.desc}`);
     });
     lines.push('');
   });
