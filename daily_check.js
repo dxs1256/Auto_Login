@@ -189,23 +189,22 @@ function formatForWeCom(results, city) {
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     const firstData = eventGroups[event][0];
-    const dateStr = firstData.tb_event_time ? firstData.tb_event_time.split(' ')[0].slice(5) : '';
-    lines.push(`📆 <b>${eventName}</b> (${dateStr})`);
+    lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'wecom');
       const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
-      const timeStr = data.tb_event_time ? data.tb_event_time.split(' ')[1].slice(0, 5) : '';
 
       lines.push(`🔹 <b>${item.model}</b>`);
       lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${item.qualityText}</font> | ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
-      lines.push(`   🕐 ${data.tb_event_time}`);
     });
     lines.push('');
   });
 
   lines.push('--------------------');
+  const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
+  lines.push(`📨 推送时间: ${now}`);
   lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
@@ -221,22 +220,21 @@ function formatForTelegram(results, city) {
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     const firstData = eventGroups[event][0];
-    const dateStr = firstData.tb_event_time ? firstData.tb_event_time.split(' ')[0].slice(5) : '';
-    lines.push(`📆 <b>${eventName}</b> (${dateStr})`);
+    lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'tg');
-      const timeStr = data.tb_event_time ? data.tb_event_time.split(' ')[1].slice(0, 5) : '';
 
       lines.push(`🔹 <b>${item.model}</b>`);
       lines.push(`   ${item.qualityEmoji} 概率: <b>${data.quality.toFixed(3)} ${item.qualityText}</b> | ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
-      lines.push(`   🕐 ${data.tb_event_time}`);
     });
     lines.push('');
   });
 
   lines.push('--------------------');
+  const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
+  lines.push(`📨 推送时间: ${now}`);
   lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
