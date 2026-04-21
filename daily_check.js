@@ -21,7 +21,7 @@ const RETRY_DELAY = parseInt(process.env.SUNSET_RETRY_DELAY || '2000', 10); // m
 const QUERY_DELAY = parseInt(process.env.SUNSET_QUERY_DELAY || '1000', 10); // 请求间隔 ms
 
 // 通道配置 (为空则不发送)
-const WX_WEBHOOK_URL = process.env.WX_WEBHOOK_URL || '';
+const PUSHPLUS_TOKEN = process.env.PUSHPLUS_TOKEN || '';
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN || '';
 const TG_CHAT_ID = process.env.TG_CHAT_ID || '';
 
@@ -185,16 +185,18 @@ async function querySunsetDataWithRetry(city, event, model, retryCount = 0) {
 
 // ==================== 发送通道 ====================
 
-async function sendWeChat(content) {
-  if (!WX_WEBHOOK_URL) return;
+async function sendPushPlus(content) {
+  if (!PUSHPLUS_TOKEN) return;
   try {
-    await axios.post(WX_WEBHOOK_URL, {
-      msgtype: "markdown",
-      markdown: { content }
+    await axios.post('http://www.pushplus.plus/send', {
+      token: PUSHPLUS_TOKEN,
+      title: '火烧云预警',
+      content: content,
+      type: 'markdown'
     });
-    console.log('✅ 企业微信通知推送成功');
+    console.log('✅ PushPlus 通知推送成功');
   } catch (e) {
-    console.log(`⚠️ 企业微信发送失败: ${e.message}`);
+    console.log(`⚠️ PushPlus 发送失败: ${e.message}`);
   }
 }
 
@@ -220,7 +222,7 @@ async function main() {
   console.log(`📍 城市: ${CITY} | 🔔 阈值: ${THRESHOLD} | ⏰ 时区: ${TIMEZONE}`);
   console.log(`📊 模型: ${MODELS.join(', ')} | 📅 事件: ${EVENTS.map(e => EVENT_NAMES[e]).join(', ')}`);
   
-  if (WX_WEBHOOK_URL) console.log('🔔 企业微信通知: 已启用');
+  if (PUSHPLUS_TOKEN) console.log('📲 PushPlus通知: 已启用');
   if (TG_BOT_TOKEN) console.log('✈️ Telegram通知: 已启用');
   console.log('--------------------------------------------------------');
 
@@ -264,9 +266,9 @@ async function main() {
   if (notifyResults.length > 0) {
     console.log('📱 正在推送至各个终端...');
     
-    if (WX_WEBHOOK_URL) {
-      const wxContent = formatForWeCom(notifyResults, CITY);
-      await sendWeChat(wxContent);
+    if (PUSHPLUS_TOKEN) {
+      const ppContent = formatForWeCom(notifyResults, CITY);
+      await sendPushPlus(ppContent);
     }
 
     if (TG_BOT_TOKEN && TG_CHAT_ID) {

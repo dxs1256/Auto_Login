@@ -28,8 +28,8 @@ jobs:
           SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
           SUNSET_THRESHOLD: '0.5'
           
-          # 企业微信 (如果不需要可以不填)
-          WX_WEBHOOK_URL: ${{ secrets.WX_WEBHOOK_URL }}
+          # PushPlus 配置
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           
           # Telegram 配置
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
