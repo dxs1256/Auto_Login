@@ -200,7 +200,7 @@ function formatForWeCom(results, city) {
       lines.push(`🔹 <b>${item.model}</b>`);
       lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${item.qualityText}</font> | ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
-      lines.push(`   🕐 ${timeStr}`);
+      lines.push(`   🕐 ${data.tb_event_time}`);
     });
     lines.push('');
   });
@@ -231,7 +231,7 @@ function formatForTelegram(results, city) {
       lines.push(`🔹 <b>${item.model}</b>`);
       lines.push(`   ${item.qualityEmoji} 概率: <b>${data.quality.toFixed(3)} ${item.qualityText}</b> | ${item.qualityDesc}`);
       lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
-      lines.push(`   🕐 ${timeStr}`);
+      lines.push(`   🕐 ${data.tb_event_time}`);
     });
     lines.push('');
   });
