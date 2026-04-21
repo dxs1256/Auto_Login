@@ -180,62 +180,65 @@ function groupByEvent(results) {
 // -------------------- 平台特定格式化 --------------------
 
 function formatForWeCom(results, city) {
-  const lines = [`## 🌅 ${city} 火烧云预警`];
-  lines.push(`> 📍 城市: ${city} | 🔔 阈值: ${THRESHOLD} | ⏰ 时区: ${TIMEZONE}`);
+  const lines = [];
+  lines.push(`🌅 <u><b>${city} 火烧云预警</b></u>`);
   lines.push('');
-  lines.push('---');
+  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
+  lines.push('');
 
   const eventGroups = groupByEvent(results);
 
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
-    lines.push(`\n### 📆 ${eventName}`);
+    lines.push(`📆 <b>${eventName}</b>`);
     lines.push('');
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'wecom');
       const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
 
-      lines.push(`**${item.model}**`);
-      lines.push(`> ${item.qualityEmoji} 概率: <font color="${color}">${item.qualityText} (${data.quality})</font>`);
-      lines.push(`> 💨 AOD: ${item.aod}${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
-      lines.push(`> ⏰ 时间: ${item.eventTime}`);
-      lines.push(`> 💡 说明: ${item.qualityDesc}`);
+      lines.push(`🔹 <b>${item.model}</b>`);
+      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${item.qualityText}</font> (${data.quality.toFixed(3)})`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
+      lines.push(`   ⏰ 时间: ${item.eventTime}`);
+      lines.push(`   💡 ${item.qualityDesc}`);
       lines.push('');
     });
   });
 
-  lines.push('---');
-  lines.push('> 🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
+  lines.push('--------------------');
+  lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
 }
 
 function formatForTelegram(results, city) {
   const lines = [];
-  lines.push(`🌅 <b>${city} 火烧云预警</b>`);
-  lines.push(`📍 城市: ${city} | 🔔 阈值: ${THRESHOLD} | ⏰ 时区: ${TIMEZONE}`);
+  lines.push(`🌅 <u><b>${city} 火烧云预警</b></u>`);
+  lines.push('');
+  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
   lines.push('');
 
   const eventGroups = groupByEvent(results);
 
   Object.keys(eventGroups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
-    lines.push(`📆 <u><b>${eventName}</b></u>`);
+    lines.push(`📆 <b>${eventName}</b>`);
     lines.push('');
 
     eventGroups[event].forEach(data => {
       const item = formatResultItem(data, 'tg');
 
       lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <b>${item.qualityText}</b> (${data.quality}) - ${item.qualityDesc}`);
-      lines.push(`   💨 AOD: ${item.aod}${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
+      lines.push(`   ${item.qualityEmoji} 概率: <b>${item.qualityText}</b> (${data.quality.toFixed(3)})`);
+      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji} ${item.aodText} - ${item.aodDesc}`);
       lines.push(`   ⏰ 时间: ${item.eventTime}`);
+      lines.push(`   💡 ${item.qualityDesc}`);
       lines.push('');
     });
   });
 
-  lines.push('---');
+  lines.push('--------------------');
   lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
