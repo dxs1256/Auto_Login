@@ -94,18 +94,19 @@ function formatForWeCom(results, city) {
 
   const groups = groupByEvent(results);
 
-  Object.keys(eventGroups).forEach(event => {
+  Object.keys(groups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
-    const firstData = eventGroups[event][0];
+    const firstData = groups[event][0];
     lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
-    eventGroups[event].forEach(data => {
-      const item = formatResultItem(data, 'wecom');
-      const color = data.quality >= 0.6 ? 'warning' : (data.quality >= 0.4 ? 'info' : 'comment');
+    groups[event].forEach(data => {
+      const qInfo = getQualityInfo(data.quality);
+      const aInfo = getAodInfo(data.tb_aod);
+      const color = qInfo.color;
 
-      lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${item.qualityText}</font> | ${item.qualityDesc}`);
-      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
+      lines.push(`🔹 <b>${data.model}</b>`);
+      lines.push(`   ${qInfo.emoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${qInfo.text}</font> | ${qInfo.desc}`);
+      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text} - ${aInfo.emoji === '💎' ? '空气极其通透' : aInfo.emoji === '🌿' ? '空气一般' : '空气浑浊'}`);
     });
     lines.push('');
   });
@@ -126,17 +127,18 @@ function formatForTelegram(results, city) {
 
   const groups = groupByEvent(results);
 
-  Object.keys(eventGroups).forEach(event => {
+  Object.keys(groups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
-    const firstData = eventGroups[event][0];
+    const firstData = groups[event][0];
     lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
 
-    eventGroups[event].forEach(data => {
-      const item = formatResultItem(data, 'tg');
+    groups[event].forEach(data => {
+      const qInfo = getQualityInfo(data.quality);
+      const aInfo = getAodInfo(data.tb_aod);
 
-      lines.push(`🔹 <b>${item.model}</b>`);
-      lines.push(`   ${item.qualityEmoji} 概率: <b>${data.quality.toFixed(3)} ${item.qualityText}</b> | ${item.qualityDesc}`);
-      lines.push(`   💨 AOD: ${item.aod} ${item.aodEmoji}${item.aodText} - ${item.aodDesc}`);
+      lines.push(`🔹 <b>${data.model}</b>`);
+      lines.push(`   ${qInfo.emoji} 概率: <b>${data.quality.toFixed(3)} ${qInfo.text}</b> | ${qInfo.desc}`);
+      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text} - ${aInfo.emoji === '💎' ? '空气极其通透' : aInfo.emoji === '🌿' ? '空气一般' : '空气浑浊'}`);
     });
     lines.push('');
   });
