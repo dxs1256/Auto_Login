@@ -104,8 +104,8 @@ function formatForWeCom(results, city) {
       const aInfo = getAodInfo(data.tb_aod);
 
       lines.push(`🔹 ${data.model}`);
-      lines.push(`   ${qInfo.emoji} 观赏指数: ${qInfo.text} - ${qInfo.desc}`);
-      lines.push(`   🌬️ 空气质量: ${aInfo.emoji}${aInfo.text}`);
+      lines.push(`   ${qInfo.emoji} 观赏指数: ${qInfo.text} (${data.quality.toFixed(3)}) - ${qInfo.desc}`);
+      lines.push(`   🌬️ 空气质量: ${aInfo.emoji}${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)})`);
     });
     lines.push('');
   });
