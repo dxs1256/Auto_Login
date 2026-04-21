@@ -86,10 +86,10 @@ function sleep(ms) {
 
 // ==================== 核心排版逻辑 ====================
 
-// 1. 企业微信排版 (扁平化无嵌套设计，适配微信特殊Markdown)
+// 1. 企业微信排版 (通俗易懂版)
 function formatForWeCom(results, city) {
   const lines = [];
-  lines.push(`📍 **${city}** | 🔔 阈值: **${THRESHOLD}** | ⏰ ${TIMEZONE}`);
+  lines.push(`📍 ${city} | 🔔 阈值: ${THRESHOLD} | ⏰ ${TIMEZONE}`);
   lines.push('');
 
   const groups = groupByEvent(results);
@@ -97,16 +97,15 @@ function formatForWeCom(results, city) {
   Object.keys(groups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     const firstData = groups[event][0];
-    lines.push(`📆 **${eventName}** ${firstData.tb_event_time}`);
+    lines.push(`📆 ${eventName} ${firstData.tb_event_time}`);
 
     groups[event].forEach(data => {
       const qInfo = getQualityInfo(data.quality);
       const aInfo = getAodInfo(data.tb_aod);
-      const color = qInfo.color;
 
-      lines.push(`🔹 **${data.model}**`);
-      lines.push(`   ${qInfo.emoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${qInfo.text}</font> | ${qInfo.desc}`);
-      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text}`);
+      lines.push(`🔹 ${data.model}`);
+      lines.push(`   ${qInfo.emoji} 观赏指数: ${qInfo.text} - ${qInfo.desc}`);
+      lines.push(`   🌬️ 空气质量: ${aInfo.emoji}${aInfo.text}`);
     });
     lines.push('');
   });
