@@ -89,7 +89,7 @@ function sleep(ms) {
 // 1. 企业微信排版 (扁平化无嵌套设计，适配微信特殊Markdown)
 function formatForWeCom(results, city) {
   const lines = [];
-  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
+  lines.push(`📍 **${city}** | 🔔 阈值: **${THRESHOLD}** | ⏰ ${TIMEZONE}`);
   lines.push('');
 
   const groups = groupByEvent(results);
@@ -97,16 +97,16 @@ function formatForWeCom(results, city) {
   Object.keys(groups).forEach(event => {
     const eventName = EVENT_NAMES[event] || event;
     const firstData = groups[event][0];
-    lines.push(`📆 <b>${eventName}</b> ${firstData.tb_event_time}`);
+    lines.push(`📆 **${eventName}** ${firstData.tb_event_time}`);
 
     groups[event].forEach(data => {
       const qInfo = getQualityInfo(data.quality);
       const aInfo = getAodInfo(data.tb_aod);
       const color = qInfo.color;
 
-      lines.push(`🔹 <b>${data.model}</b>`);
+      lines.push(`🔹 **${data.model}**`);
       lines.push(`   ${qInfo.emoji} 概率: <font color="${color}">${data.quality.toFixed(3)} ${qInfo.text}</font> | ${qInfo.desc}`);
-      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text} - ${aInfo.emoji === '💎' ? '空气极其通透' : aInfo.emoji === '🌿' ? '空气一般' : '空气浑浊'}`);
+      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text}`);
     });
     lines.push('');
   });
