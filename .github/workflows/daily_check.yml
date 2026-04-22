@@ -2,8 +2,8 @@ name: 火烧云监控
 
 on:
   schedule:
-    # 北京时间 12:00 (UTC 4) 和 20:00 (UTC 12)
-    - cron: '0 4,12 * * *'
+    # 三小时运行一次
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 jobs:
