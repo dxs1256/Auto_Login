@@ -9,11 +9,12 @@ const axios = require('axios');
 
 // ==================== 配置区 ====================
 // 基础配置
-const CITY = process.env.SUNSET_CITY || '广东省-深圳';
+const CITY = process.env.SUNSET_CITY || '广东省 - 深圳';
 const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5');
 const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS'];
-const EVENTS = ['set_1', 'set_2', 'rise_1']; // 常用: set_1今天落日, set_2明天落日, rise_1明天日出
+const EVENTS = ['set_1', 'set_2', 'rise_1']; // 常用：set_1 今天落日，set_2 明天落日，rise_1 明天日出
 const TIMEZONE = process.env.SUNSET_TIMEZONE || 'Asia/Shanghai'; 
+const NOTIFY_WINDOW_HOURS = parseInt(process.env.SUNSET_NOTIFY_WINDOW || '24'); // 只在事件前 X 小时内推送（默认 24 小时）
 
 // 重试配置
 const MAX_RETRIES = parseInt(process.env.SUNSET_MAX_RETRIES || '3', 10);
@@ -82,6 +83,66 @@ function groupByEvent(results) {
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
+}
+
+function isEventPassed(eventTime) {
+  if (!eventTime) return true;
+  const now = new Date();
+  
+  // 解析 API 返回的时间格式
+  let eventDate;
+  const timeStr = String(eventTime).trim();
+  
+  // 尝试解析 "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DD HH:mm" 格式
+  const matchFull = timeStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+  if (matchFull) {
+    const [, year, month, day, hour, minute] = matchFull;
+    eventDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${getTimezoneOffset()}`);
+  } else {
+    // 尝试解析 "MM-DD HH:mm" 格式
+    const matchShort = timeStr.match(/(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
+    if (matchShort) {
+      const [, month, day, hour, minute] = matchShort;
+      const year = now.getFullYear();
+      eventDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${getTimezoneOffset()}`);
+    } else {
+      // 尝试直接解析
+      eventDate = new Date(timeStr);
+    }
+  }
+  
+  if (isNaN(eventDate.getTime())) {
+    console.log(`  ⚠️ 无法解析时间：${timeStr}`);
+    return false; // 无法解析时不跳过，避免误判
+  }
+  
+  // 检查是否已过时
+  if (eventDate < now) {
+    return true;
+  }
+  
+  // 检查是否还在通知窗口内（提前太多也不推送）
+  const hoursUntilEvent = (eventDate - now) / (1000 * 60 * 60);
+  if (hoursUntilEvent > NOTIFY_WINDOW_HOURS) {
+    console.log(`  ⏭️ "${timeStr}" 距离事件还有${hoursUntilEvent.toFixed(1)}小时，超过通知窗口 (${NOTIFY_WINDOW_HOURS}小时)，跳过`);
+    return true;
+  }
+  
+  return false;
+}
+
+function getTimezoneOffset() {
+  // 根据配置的时区返回偏移量
+  const tzMap = {
+    'Asia/Shanghai': '+08:00',
+    'Asia/Chongqing': '+08:00',
+    'UTC': '+00:00',
+    'America/New_York': '-05:00',
+    'America/Los_Angeles': '-08:00',
+    'Europe/London': '+00:00',
+    'Asia/Tokyo': '+09:00'
+  };
+  return tzMap[TIMEZONE] || '+08:00';
 }
 
 // ==================== 核心排版逻辑 ====================
@@ -236,9 +297,11 @@ async function main() {
         const quality = parseQuality(data.tb_quality);
         const qInfo = getQualityInfo(quality);
 
-        console.log(`  ✅ 成功 -> 概率: ${quality} (${qInfo.text}) | 时间: ${data.tb_event_time} | AOD: ${data.tb_aod}`);
+        console.log(`  ✅ 成功 -> 概率：${quality} (${qInfo.text}) | 时间：${data.tb_event_time} | AOD: ${data.tb_aod}`);
 
-        if (quality >= THRESHOLD) {
+        if (isEventPassed(data.tb_event_time)) {
+          console.log(`  ⏭️ "${EVENT_NAMES[event]}" 时间已过 (${data.tb_event_time})，跳过`);
+        } else if (quality >= THRESHOLD) {
           if (event === 'set_1' && todaySunsetNotified) {
             console.log(`  ⏭️ "今天落日"已达标过，跳过重复预警`);
           } else {
@@ -254,6 +317,8 @@ async function main() {
         } else {
           console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
         }
+      } else {
+        console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
       }
 
       if (QUERY_DELAY > 0) await sleep(QUERY_DELAY);
