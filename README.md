@@ -1,82 +1,99 @@
-# 自用全自动签到与通知系统
+# Auto Login & Monitor System
 
-**驱动：GitHub Actions | 核心：Python/Node.js | 通知：Telegram + PushPlus**
+**自用全自动签到、保活与监控系统 · 基于 GitHub Actions 驱动**
 
-本仓库自动化执行各类网站和服务的日常签到/保活任务，所有账号和通知信息均通过 GitHub Secrets 安全管理。
-
----
-
-## 任务列表 (Services)
-
-| 网站/服务          | 脚本文件         | 核心功能                     | 建议运行频率 (UTC)               | 状态        | 环境变量 (Secrets)                          |
-|--------------------|------------------|------------------------------|----------------------------------|-------------|---------------------------------------------|
-| **Netlib**         | `login.js`       | Playwright 自动登录保活       | `0 12 * * *`（每天 20:00 北京时间）<br>或每周 `0 20 * * 6` | 稳定运行    | `NETLIB_ACCOUNTS`                           |
-| **Koyeb**          | `koyeb.py`       | API 自动登录保活             | `0 1 * * *`（每天 09:00 北京时间） | 稳定运行    | `KOYEB_ACCOUNTS`（JSON 数组）               |
-| **福利吧**| `fuliba.js`      | 自动签到 + 多域名容错         | `0 2 * * *`（每天 10:00 北京时间） | 稳定运行    | `FULI_COOKIE`                               |
-| **Wispbyte**       | `wispbyte.py`    | Cookie 保活 + 用户名提取      | `0 3 * * *`（每天 11:00 北京时间） | 稳定运行    | `WISPBYTE_COOKIE_STRING`、`SOCKS5_PROXY`（可选） |
-| **Office 365 E5**  | `e5.py`          | 多租户订阅状态监控与续期提醒   | `0 4 * * *`（每天 12:00 北京时间） | 稳定运行    | `TENANT_ID`、`CLIENT_ID`、`CLIENT_SECRET`<br>（多账号后缀 _2、_3…）|
+![GitHub Actions](https://img.shields.io/badge/Engine-GitHub_Actions-blue?logo=githubactions)
+![Language](https://img.shields.io/badge/Language-Python%20%7C%20Node.js-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## 部署与配置
+## 🌟 核心亮点
 
-所有敏感信息都必须作为 **GitHub Repository Secrets** 配置。
-
-### 1. 通用通知配置（强烈建议都配上）
-
-| Secret 名称         | 作用                                      |
-|---------------------|-------------------------------------------|
-| `TG_BOT_TOKEN`      | Telegram Bot 的 Token                     |
-| `TG_CHAT_ID`        | 接收通知的聊天 ID（私聊/群组均可）         |
-| `PUSHPLUS_TOKEN`    | PushPlus 推送 Token（微信/公众号通知）     |
-
-### 2. 各服务专用配置
-
-| Secret 名称                  | 对应脚本         | 格式说明                                                                 |
-|-----------------------------|------------------|--------------------------------------------------------------------------|
-| `NETLIB_ACCOUNTS`           | `login.js`       | `用户名1:密码1,用户名2:密码2`（逗号或分号分隔）                           |
-| `KOYEB_ACCOUNTS`            | `koyeb.py`       | JSON 数组，例如：`[{"email":"a@b.com","password":"xxx"}]`                |
-| `FULI_COOKIE`               | `fuliba.js`      | 多个账号用 `@` 分隔，例如：`cookie1@cookie2@cookie3`                     |
-| `WISPBYTE_COOKIE_STRING`    | `wispbyte.py`    | 多个账号 Cookie 用 `&` 分隔（完整 Cookie 字符串）                        |
-| `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `e5.py` | 主账号凭据<br>多账号依次使用 `TENANT_ID_2`、`CLIENT_ID_2`、`CLIENT_SECRET_2` 等 |
-
-### 3. 可选配置
-
-| Secret 名称       | 作用                        |
-|-------------------|-----------------------------|
-| `SOCKS5_PROXY`    | 为 Wispbyte 等脚本提供 SOCKS5 代理（格式：`user:pass@ip:port` 或 `ip:port`） |
+- **零成本运行**：完全依托 GitHub Actions，无需购买服务器或 VPS，7x24 小时自动巡航。
+- **多账号并发**：支持多平台多账号同时管理，配置简单，扩展性强。
+- **双通道通知**：深度适配 **Telegram** 与 **PushPlus (微信)**，精美排版，确保每一条状态都能精准触达。
+- **智能容错机制**：内置多域名自动切换（福利吧）、失败重试（火烧云）、状态掩码脱敏等高级特性。
+- **模块化设计**：每个任务独立脚本与工作流，互不干扰，按需开关。
 
 ---
 
-## 建议的工作流文件 (.github/workflows/)
+## 📋 任务矩阵 (Service Matrix)
 
-| 服务          | 推荐文件名                | Cron 示例（北京时间）               |
-|---------------|---------------------------|-------------------------------------|
-| Netlib        | `netlib.yml`              | `0 12 * * *`   （每天 20:00）       |
-| Koyeb         | `koyeb.yml`               | `0 1 * * *`    （每天 09:00）       |
-| 福利吧        | `fuliba.yml`              | `0 2 * * *`    （每天 10:00）       |
-| Wispbyte      | `wispbyte.yml`            | `0 3 * * *`    （每天 11:00）       |
-| Office 365 E5 | `e5-monitor.yml`          | `0 4 * * *`    （每天 12:00）       |
-
-> 所有脚本均支持手动 workflow_dispatch 触发，方便调试。
-
----
-
-## 脚本技术栈
-
-- **Python 脚本**：`requests` 实现轻量、稳定签到/查询
-- **Node.js 脚本**：`Playwright` + `axios` 模拟真实浏览器，应对复杂登录
-- **通知方式**：Telegram + PushPlus（微信）双通道，确保不错过任何消息
+| 服务/平台 | 核心脚本 | 功能特性 | 运行频率 (北京时间) | 推荐 Secrets |
+| :--- | :--- | :--- | :--- | :--- |
+| **Netlib** | `login.js` | 🤖 Playwright 模拟真实登录保活 | 每天 20:00 或 每周六 | `NETLIB_ACCOUNTS` |
+| **Koyeb** | `koyeb.py` | ☁️ API 级账户状态监控与活跃度检查 | 每周六 00:00 | `KOYEB_TOKENS` |
+| **福利吧** | `fuliba.js` | 🎫 自动签到，6域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
+| **Wispbyte** | `wispbyte.py` | 🖥️ Dashboard 自动保活，提取用户名验证 | 每周六 20:00 | `WISPBYTE_COOKIE_STRING` |
+| **Office 365 E5** | `e5.py` | 🏢 多租户订阅状态监控与续期提醒 | 每天 00:00 | `TENANT_ID`, `CLIENT_SECRET` 等 |
+| **Loomi** | `loomi.py` | 🪙 每日签到 + 实时积分余额查询 (Supabase) | 每天 00:00 | `LOOMI_REFRESH_TOKEN` |
+| **火烧云监控** | `daily_check.js` | 🌅 监控日落/日出概率，超阈值自动预警 | 每 3 小时 | `SUNSET_CITY` |
+| **仓库清理** | `cleanup.yml` | 🧹 自动删除旧 Workflow 记录，节省空间 | 每天 11:00 | (内置) |
 
 ---
 
-## 免责声明 (Disclaimer)
+## 🚀 快速部署
 
-本仓库所有代码仅供个人学习、测试与合法自用。请严格遵守各网站服务条款，禁止用于任何商业或非法用途。  
-一切风险与后果由使用者自行承担，作者不承担任何责任。
+只需简单三步，即可一键开跑：
+
+### 1. Fork 仓库
+点击右上角的 **Fork** 按钮，将此仓库复制到你自己的 GitHub 账号下。
+
+### 2. 配置 Secrets
+进入你 Fork 后的仓库 -> `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`。
+根据你想运行的服务，添加对应的环境变量（详见下方说明）。
+
+### 3. 开启 Actions
+如果 Actions 默认是关闭的，请前往仓库的 **Actions** 标签页，点击 `I understand my workflows, go ahead and enable them` 开启。
 
 ---
 
-**一键 Fork + 配置 Secrets 即可开跑，解放双手，从此躺平！**
+## ⚙️ 环境变量配置详解
 
-![GitHub Card](https://githubcard.com/dxs1256.svg?d=dyhNeN-F)
+所有敏感信息均通过 GitHub Secrets 安全注入，绝不硬编码。
+
+### 📢 通用通知通道 (强烈建议配置)
+| Secret 名称 | 作用 |
+| :--- | :--- |
+| `TG_BOT_TOKEN` | Telegram Bot 的 Token |
+| `TG_CHAT_ID` | 接收通知的聊天 ID（私聊或群组均可） |
+| `PUSHPLUS_TOKEN` | PushPlus 推送 Token（支持公众号通知） |
+
+### 📦 各服务专用 Secrets
+
+| Secret 名称 | 对应脚本 | 格式说明 |
+| :--- | :--- | :--- |
+| `NETLIB_ACCOUNTS` | `login.js` | `用户名1:密码1,用户名2:密码2`（支持逗号或分号分隔） |
+| `KOYEB_TOKENS` | `koyeb.py` | JSON 数组，如 `[{"token":"abc"},{"token":"def"}]` |
+| `FULI_COOKIE` | `fuliba.js` | 多个账号 Cookie 用 `@` 分隔：`cookie1@cookie2` |
+| `WISPBYTE_COOKIE_STRING` | `wispbyte.py` | 多个账号 Cookie 用 `&` 分隔（完整 Cookie 字符串） |
+| `LOOMI_REFRESH_TOKEN` | `loomi.py` | 用户 Refresh Token |
+| `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `e5.py` | 微软 API 凭据。多账号可追加后缀 `_2`, `_3` (如 `TENANT_ID_2`) |
+| `SUNSET_CITY` | `daily_check.js` | 监控城市，如 `广东省 - 深圳` (默认值) |
+| `SUNSET_THRESHOLD` | `daily_check.js` | 触发报警的概率阈值，默认 `0.5` |
+
+---
+
+## 🛠️ 脚本技术栈与细节
+
+- **Node.js 脚本**：基于 `axios` 或 `Playwright` 模拟真实浏览器行为，有效绕过复杂反爬策略。
+- **Python 脚本**：使用 `requests` 实现轻量级、高并发的 API 交互。
+- **智能通知排版**：
+  - **Telegram**：采用 HTML 标签与等宽代码块混合的仪表盘排版。
+  - **PushPlus**：自动将 Markdown 或文本转换为适配微信端的 HTML 样式（带高亮与分割线）。
+
+---
+
+## ⚠️ 免责声明 (Disclaimer)
+
+1. **个人自用**：本仓库所有代码仅供个人学习、测试与合法自用。
+2. **合规使用**：请严格遵守各平台服务条款，禁止用于任何商业或非法用途。
+3. **风险自负**：一切风险与后果由使用者自行承担，作者不承担任何连带责任。
+4. **安全须知**：作者无法访问你的 Secrets，账号安全完全由 GitHub 机制保障。
+
+---
+
+> **一键 Fork + 配置 Secrets 即可开跑，解放双手，从此躺平！**
+
+*最后更新: 2026-05-19*
