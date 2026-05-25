@@ -1,6 +1,6 @@
 name: OpenRouter Model Monitor
 
-on:
+于:
   schedule:
     # 每小时运行一次（UTC 时间）
     - cron: '0 * * * *'
