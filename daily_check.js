@@ -18,7 +18,7 @@ const THRESHOLD = 0.5;                    // 触发阈值 50%
 const MODELS = ['EC', 'GFS'];             // 气象模型
 const EVENTS = ['set_1', 'set_2', 'rise_1'];  // 今天落日，明天落日，明天日出
 const TIMEZONE = 'Asia/Shanghai';         // 时区
-const NOTIFY_WINDOW_HOURS = 12;           // 通知窗口 12 小时
+const NOTIFY_WINDOW_HOURS = 24;           // 通知窗口 24 小时
 const SEND_DECLINE = true;                // 概率下降也通知
 
 // 重试配置
