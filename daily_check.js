@@ -1,27 +1,32 @@
 /*
- 火烧云概率监控脚本 v2.50
- 功能：监控日出日落火烧云概率，支持 PushPlus 与 Telegram 通知
- 更新时间：2026-04-21
- 改动：重构消息排版机制，解决 PushPlus 解析异常问题，提升TG端数据美观度
+  火烧云概率监控脚本 v2.60
+  功能：监控日出日落火烧云概率，支持 PushPlus 与 Telegram 通知
+  更新时间：2026-05-27
+  改动：
+    1. 通知窗口从 24 小时缩短为 12 小时
+    2. 新增趋势标识功能（上升/下降/稳定）
+    3. 概率下降时也会通知，提供完整信息流
 */
 
 const axios = require('axios');
 
 // ==================== 配置区 ====================
-// 基础配置
-const CITY = process.env.SUNSET_CITY || '广东省 - 深圳';
-const THRESHOLD = parseFloat(process.env.SUNSET_THRESHOLD || '0.5');
-const MODELS = process.env.SUNSET_MODELS ? process.env.SUNSET_MODELS.split(',') : ['EC', 'GFS'];
-const EVENTS = ['set_1', 'set_2', 'rise_1']; // 常用：set_1 今天落日，set_2 明天落日，rise_1 明天日出
-const TIMEZONE = process.env.SUNSET_TIMEZONE || 'Asia/Shanghai'; 
-const NOTIFY_WINDOW_HOURS = parseInt(process.env.SUNSET_NOTIFY_WINDOW || '24'); // 只在事件前 X 小时内推送（默认 24 小时）
+
+// 基础配置（非敏感，直接写死）
+const CITY = process.env.SUNSET_CITY || '十堰 - 茅箭区';
+const THRESHOLD = 0.5;                    // 触发阈值 50%
+const MODELS = ['EC', 'GFS'];             // 气象模型
+const EVENTS = ['set_1', 'set_2', 'rise_1'];  // 今天落日，明天落日，明天日出
+const TIMEZONE = 'Asia/Shanghai';         // 时区
+const NOTIFY_WINDOW_HOURS = 12;           // 通知窗口 12 小时
+const SEND_DECLINE = true;                // 概率下降也通知
 
 // 重试配置
-const MAX_RETRIES = parseInt(process.env.SUNSET_MAX_RETRIES || '3', 10);
-const RETRY_DELAY = parseInt(process.env.SUNSET_RETRY_DELAY || '2000', 10); // ms
-const QUERY_DELAY = parseInt(process.env.SUNSET_QUERY_DELAY || '1000', 10); // 请求间隔 ms
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;                 // 2 秒
+const QUERY_DELAY = 1000;                 // 1 秒
 
-// 通道配置 (为空则不发送)
+// 通知配置（敏感，用环境变量）
 const PUSHPLUS_TOKEN = process.env.PUSHPLUS_TOKEN || '';
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN || '';
 const TG_CHAT_ID = process.env.TG_CHAT_ID || '';
@@ -44,6 +49,7 @@ const QUALITY_LEVELS = {
   none: { threshold: 0, text: '不烧', emoji: '❌', color: 'comment', desc: '洗洗睡吧' }
 };
 
+const trendState = {};
 let todaySunsetNotified = false;
 
 // ==================== 工具函数 ====================
@@ -72,6 +78,22 @@ function getAodInfo(aod) {
   return { text: '差', emoji: '🌫️', desc: '空气浑浊' };
 }
 
+function getTrendInfo(current, previous) {
+  if (previous === null || previous === undefined) {
+    return { symbol: '', text: '首次监测', direction: 0 };
+  }
+  
+  const diff = current - previous;
+  
+  if (diff >= 0.1) {
+    return { symbol: '↗️', text: '上升', direction: 1 };
+  } else if (diff <= -0.1) {
+    return { symbol: '↘️', text: '下降', direction: -1 };
+  } else {
+    return { symbol: '➡️', text: '稳定', direction: 0 };
+  }
+}
+
 function groupByEvent(results) {
   const groups = {};
   results.forEach(r => {
@@ -89,39 +111,33 @@ function isEventPassed(eventTime) {
   if (!eventTime) return true;
   const now = new Date();
   
-  // 解析 API 返回的时间格式
   let eventDate;
   const timeStr = String(eventTime).trim();
   
-  // 尝试解析 "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DD HH:mm" 格式
   const matchFull = timeStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
   if (matchFull) {
     const [, year, month, day, hour, minute] = matchFull;
     eventDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${getTimezoneOffset()}`);
   } else {
-    // 尝试解析 "MM-DD HH:mm" 格式
     const matchShort = timeStr.match(/(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
     if (matchShort) {
       const [, month, day, hour, minute] = matchShort;
       const year = now.getFullYear();
       eventDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${getTimezoneOffset()}`);
     } else {
-      // 尝试直接解析
       eventDate = new Date(timeStr);
     }
   }
   
   if (isNaN(eventDate.getTime())) {
     console.log(`  ⚠️ 无法解析时间：${timeStr}`);
-    return false; // 无法解析时不跳过，避免误判
+    return false;
   }
   
-  // 检查是否已过时
   if (eventDate < now) {
     return true;
   }
   
-  // 检查是否还在通知窗口内（提前太多也不推送）
   const hoursUntilEvent = (eventDate - now) / (1000 * 60 * 60);
   if (hoursUntilEvent > NOTIFY_WINDOW_HOURS) {
     console.log(`  ⏭️ "${timeStr}" 距离事件还有${hoursUntilEvent.toFixed(1)}小时，超过通知窗口 (${NOTIFY_WINDOW_HOURS}小时)，跳过`);
@@ -132,7 +148,6 @@ function isEventPassed(eventTime) {
 }
 
 function getTimezoneOffset() {
-  // 根据配置的时区返回偏移量
   const tzMap = {
     'Asia/Shanghai': '+08:00',
     'Asia/Chongqing': '+08:00',
@@ -147,10 +162,9 @@ function getTimezoneOffset() {
 
 // ==================== 核心排版逻辑 ====================
 
-// 1. 企业微信排版 (通俗易懂版)
 function formatForWeCom(results, city) {
   const lines = [];
-  lines.push(`📍 ${city} | 🔔 阈值: ${THRESHOLD} | ⏰ ${TIMEZONE}`);
+  lines.push(`📍 ${city} | 🔔 阈值：${THRESHOLD} | ⏰ ${TIMEZONE}`);
   lines.push('');
 
   const groups = groupByEvent(results);
@@ -163,26 +177,31 @@ function formatForWeCom(results, city) {
     groups[event].forEach(data => {
       const qInfo = getQualityInfo(data.quality);
       const aInfo = getAodInfo(data.tb_aod);
+      const trendInfo = data.trendInfo;
 
       lines.push(`🔹 ${data.model}`);
-      lines.push(`   ${qInfo.emoji} 观赏指数: ${qInfo.text} (${data.quality.toFixed(3)})  - ${qInfo.desc}`);
-      lines.push(`   🌬️ 空气质量: ${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)}) - ${aInfo.desc}`);
+      lines.push(`   ${qInfo.emoji} 观赏指数：${qInfo.text} (${data.quality.toFixed(3)})  ${trendInfo.symbol}${trendInfo.text}`);
+      if (trendInfo.direction === -1 && SEND_DECLINE) {
+        lines.push(`   ⚠️ 概率下降，可能看不到，降低期望值`);
+      } else {
+        lines.push(`   ${qInfo.desc}`);
+      }
+      lines.push(`   🌬️ 空气质量：${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)}) - ${aInfo.desc}`);
     });
     lines.push('');
   });
 
   lines.push('--------------------');
   const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
-  lines.push(`📨 推送时间: ${now}`);
-  lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
+  lines.push(`📨 推送时间：${now}`);
+  lines.push('🔗 数据来源：sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
 }
 
-// 2. Telegram排版 (等宽代码块与HTML混合的仪表盘设计)
 function formatForTelegram(results, city) {
   const lines = [];
-  lines.push(`📍 <b>${city}</b> | 🔔 阈值: <b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
+  lines.push(`📍 <b>${city}</b> | 🔔 阈值：<b>${THRESHOLD}</b> | ⏰ ${TIMEZONE}`);
   lines.push('');
 
   const groups = groupByEvent(results);
@@ -195,18 +214,24 @@ function formatForTelegram(results, city) {
     groups[event].forEach(data => {
       const qInfo = getQualityInfo(data.quality);
       const aInfo = getAodInfo(data.tb_aod);
+      const trendInfo = data.trendInfo;
 
       lines.push(`🔹 <b>${data.model}</b>`);
-      lines.push(`   ${qInfo.emoji} 概率: <b>${data.quality.toFixed(3)} ${qInfo.text}</b> | ${qInfo.desc}`);
-      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text} - ${aInfo.emoji === '💎' ? '空气极其通透' : aInfo.emoji === '🌿' ? '空气一般' : '空气浑浊'}`);
+      lines.push(`   ${qInfo.emoji} 概率：<b>${data.quality.toFixed(3)} ${qInfo.text}</b> ${trendInfo.symbol}${trendInfo.text}`);
+      if (trendInfo.direction === -1 && SEND_DECLINE) {
+        lines.push(`   ⚠️ <i>概率下降，建议降低期望</i>`);
+      } else {
+        lines.push(`   ${qInfo.desc}`);
+      }
+      lines.push(`   💨 AOD: ${parseFloat(data.tb_aod).toFixed(3)} ${aInfo.emoji}${aInfo.text} - ${aInfo.desc}`);
     });
     lines.push('');
   });
 
   lines.push('--------------------');
   const now = new Date().toLocaleString('zh-CN', { timeZone: TIMEZONE });
-  lines.push(`📨 推送时间: ${now}`);
-  lines.push('🔗 数据来源: sunsetbot.top | 仅供娱乐参考');
+  lines.push(`📨 推送时间：${now}`);
+  lines.push('🔗 数据来源：sunsetbot.top | 仅供娱乐参考');
 
   return lines.join('\n');
 }
@@ -257,7 +282,7 @@ async function sendPushPlus(content) {
     });
     console.log('✅ PushPlus 通知推送成功');
   } catch (e) {
-    console.log(`⚠️ PushPlus 发送失败: ${e.message}`);
+    console.log(`⚠️ PushPlus 发送失败：${e.message}`);
   }
 }
 
@@ -272,7 +297,7 @@ async function sendTelegram(content) {
     });
     console.log('✅ Telegram 通知推送成功');
   } catch (e) {
-    console.log(`⚠️ Telegram 发送失败: ${e.message}`);
+    console.log(`⚠️ Telegram 发送失败：${e.message}`);
   }
 }
 
@@ -280,11 +305,12 @@ async function sendTelegram(content) {
 
 async function main() {
   console.log('\n==================== 火烧云监控启动 ====================');
-  console.log(`📍 城市: ${CITY} | 🔔 阈值: ${THRESHOLD} | ⏰ 时区: ${TIMEZONE}`);
-  console.log(`📊 模型: ${MODELS.join(', ')} | 📅 事件: ${EVENTS.map(e => EVENT_NAMES[e]).join(', ')}`);
+  console.log(`📍 城市：${CITY} | 🔔 阈值：${THRESHOLD} | ⏰ 时区：${TIMEZONE}`);
+  console.log(`📊 模型：${MODELS.join(', ')} | 📅 事件：${EVENTS.map(e => EVENT_NAMES[e]).join(', ')}`);
+  console.log(`🔔 通知窗口：${NOTIFY_WINDOW_HOURS}小时 | 📉 下降通知：${SEND_DECLINE ? '开启' : '关闭'}`);
   
-  if (PUSHPLUS_TOKEN) console.log('📲 PushPlus通知: 已启用');
-  if (TG_BOT_TOKEN) console.log('✈️ Telegram通知: 已启用');
+  if (PUSHPLUS_TOKEN) console.log('📲 PushPlus 通知：已启用');
+  if (TG_BOT_TOKEN) console.log('✈️ Telegram 通知：已启用');
   console.log('--------------------------------------------------------');
 
   const notifyResults = [];
@@ -296,26 +322,37 @@ async function main() {
       if (data) {
         const quality = parseQuality(data.tb_quality);
         const qInfo = getQualityInfo(quality);
+        
+        const stateKey = `${model}_${event}`;
+        const previousQuality = trendState[stateKey] || null;
+        const trendInfo = getTrendInfo(quality, previousQuality);
+        
+        trendState[stateKey] = quality;
 
-        console.log(`  ✅ 成功 -> 概率：${quality} (${qInfo.text}) | 时间：${data.tb_event_time} | AOD: ${data.tb_aod}`);
+        console.log(`  ✅ 成功 -> 概率：${quality} (${qInfo.text}) ${trendInfo.symbol}${trendInfo.text} | 时间：${data.tb_event_time} | AOD: ${data.tb_aod}`);
 
         if (isEventPassed(data.tb_event_time)) {
           console.log(`  ⏭️ "${EVENT_NAMES[event]}" 时间已过 (${data.tb_event_time})，跳过`);
-        } else if (quality >= THRESHOLD) {
-          if (event === 'set_1' && todaySunsetNotified) {
-            console.log(`  ⏭️ "今天落日"已达标过，跳过重复预警`);
-          } else {
-            console.log(`  🎯 达标！加入推送队列`);
-            notifyResults.push({
-              model, event, quality,
-              tb_quality: data.tb_quality,
-              tb_event_time: data.tb_event_time,
-              tb_aod: data.tb_aod
-            });
-            if (event === 'set_1') todaySunsetNotified = true;
-          }
         } else {
-          console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
+          const shouldNotify = quality >= THRESHOLD || (SEND_DECLINE && trendInfo.direction === -1);
+          
+          if (shouldNotify) {
+            if (event === 'set_1' && todaySunsetNotified) {
+              console.log(`  ⏭️ "今天落日"已达标过，跳过重复预警`);
+            } else {
+              console.log(`  🎯 加入推送队列 (趋势：${trendInfo.symbol}${trendInfo.text})`);
+              notifyResults.push({
+                model, event, quality,
+                tb_quality: data.tb_quality,
+                tb_event_time: data.tb_event_time,
+                tb_aod: data.tb_aod,
+                trendInfo
+              });
+              if (event === 'set_1') todaySunsetNotified = true;
+            }
+          } else {
+            console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
+          }
         }
       } else {
         console.log(`  ⏳ 未达标 (需 >= ${THRESHOLD})，忽略`);
@@ -326,7 +363,7 @@ async function main() {
   }
 
   console.log('\n======================== 数据汇总 ========================');
-  console.log(`📊 共筛选出 ${notifyResults.length} 条高概率数据`);
+  console.log(`📊 共筛选出 ${notifyResults.length} 条数据`);
 
   if (notifyResults.length > 0) {
     console.log('📱 正在推送至各个终端...');
@@ -342,7 +379,7 @@ async function main() {
     }
     
   } else {
-    console.log('💤 当日无惊艳天象预警，不发送推送骚扰');
+    console.log('💤 当日无数据或全部超过通知窗口，不发送推送');
   }
 
   console.log('==================== 本次监控结束 ====================\n');
