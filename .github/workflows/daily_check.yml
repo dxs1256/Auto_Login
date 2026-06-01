@@ -17,12 +17,13 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: 安装依赖
         run: npm install axios
 
       - name: 运行监控
+        timeout-minutes: 5
         env:
           # 城市设置
           SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
