@@ -22,12 +22,9 @@
 
 | 服务/平台 | 核心脚本 | 功能特性 | 运行频率 (北京时间) | 推荐 Secrets |
 | :--- | :--- | :--- | :--- | :--- |
-| **Netlib** | `login.js` | 🤖 Playwright 模拟真实登录保活 | 每天 20:00 或 每周六 | `NETLIB_ACCOUNTS` |
 | **Koyeb** | `koyeb.py` | ☁️ API 级账户状态监控与活跃度检查 | 每周六 00:00 | `KOYEB_TOKENS` |
-| **福利吧** | `fuliba.js` | 🎫 自动签到，6域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
-| **Wispbyte** | `wispbyte.py` | 🖥️ Dashboard 自动保活，提取用户名验证 | 每周六 20:00 | `WISPBYTE_COOKIE_STRING` |
+| **福利吧** | `fuliba.js` | 🎫 自动签到，6 域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
 | **Office 365 E5** | `e5.py` | 🏢 多租户订阅状态监控与续期提醒 | 每天 00:00 | `TENANT_ID`, `CLIENT_SECRET` 等 |
-| **Loomi** | `loomi.py` | 🪙 每日签到 + 实时积分余额查询 (Supabase) | 每天 00:00 | `LOOMI_REFRESH_TOKEN` |
 | **火烧云监控** | `daily_check.js` | 🌅 监控日落/日出概率，超阈值自动预警 | 每 3 小时 | `SUNSET_CITY` |
 | **仓库清理** | `cleanup.yml` | 🧹 自动删除旧 Workflow 记录，节省空间 | 每天 11:00 | (内置) |
 
@@ -64,11 +61,8 @@
 
 | Secret 名称 | 对应脚本 | 格式说明 |
 | :--- | :--- | :--- |
-| `NETLIB_ACCOUNTS` | `login.js` | `用户名1:密码1,用户名2:密码2`（支持逗号或分号分隔） |
 | `KOYEB_TOKENS` | `koyeb.py` | JSON 数组，如 `[{"token":"abc"},{"token":"def"}]` |
 | `FULI_COOKIE` | `fuliba.js` | 多个账号 Cookie 用 `@` 分隔：`cookie1@cookie2` |
-| `WISPBYTE_COOKIE_STRING` | `wispbyte.py` | 多个账号 Cookie 用 `&` 分隔（完整 Cookie 字符串） |
-| `LOOMI_REFRESH_TOKEN` | `loomi.py` | 用户 Refresh Token |
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `e5.py` | 微软 API 凭据。多账号可追加后缀 `_2`, `_3` (如 `TENANT_ID_2`) |
 | `SUNSET_CITY` | `daily_check.js` | 监控城市，如 `广东省 - 深圳` (默认值) |
 | `SUNSET_THRESHOLD` | `daily_check.js` | 触发报警的概率阈值，默认 `0.5` |
@@ -77,7 +71,7 @@
 
 ## 🛠️ 脚本技术栈与细节
 
-- **Node.js 脚本**：基于 `axios` 或 `Playwright` 模拟真实浏览器行为，有效绕过复杂反爬策略。
+- **Node.js 脚本**：基于 `axios` 实现 HTTP 请求，支持重试机制与智能通知排版。
 - **Python 脚本**：使用 `requests` 实现轻量级、高并发的 API 交互。
 - **智能通知排版**：
   - **Telegram**：采用 HTML 标签与等宽代码块混合的仪表盘排版。
@@ -96,4 +90,4 @@
 
 > **一键 Fork + 配置 Secrets 即可开跑，解放双手，从此躺平！**
 
-*最后更新: 2026-05-19*
+*最后更新: 2026-06-13*
