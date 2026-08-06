@@ -54,10 +54,42 @@ def get_access_token(tenant_id, client_id, client_secret):
         print(f"网络请求异常: {e}")
         return None
 
+def get_extra_info(token):
+    """获取租户名称、创建时间和最近活跃日志"""
+    headers = {'Authorization': f'Bearer {token}'}
+    info = {"org_name": "未知组织", "created_date": "未知", "activity": "无记录"}
+    
+    try:
+        # 1. 查询租户详细信息
+        org_res = requests.get("https://graph.microsoft.com/v1.0/organization", headers=headers)
+        if org_res.status_code == 200:
+            org_data = org_res.json()['value'][0]
+            info["org_name"] = org_data.get('displayName')
+            info["created_date"] = org_data.get('createdDateTime', '').split('T')[0]
+
+        # 2. 查询最近审计日志 (反映开发活跃度)
+        audit_url = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?$top=1"
+        audit_res = requests.get(audit_url, headers=headers)
+        if audit_res.status_code == 200:
+            logs = audit_res.json().get('value', [])
+            if logs:
+                # 获取最后一次活动的时间并简单格式化
+                raw_time = logs[0].get('activityDateTime', '')
+                info["activity"] = raw_time.replace('T', ' ').split('.')[0] + " (UTC)"
+            else:
+                info["activity"] = "⚠️ 近期无活跃记录"
+        elif audit_res.status_code == 403:
+            info["activity"] = "❌ 缺少 AuditLog 权限"
+    except:
+        pass
+    return info
+
 def get_sub_status(token, account_name):
     """查询单个账号的状态"""
-    url = "https://graph.microsoft.com/v1.0/subscribedSkus"
     headers = {'Authorization': f'Bearer {token}'}
+    
+    # 首先获取额外信息
+    extra = get_extra_info(token)
     
     # 汉化与映射配置
     sku_mapping = {
@@ -65,24 +97,23 @@ def get_sub_status(token, account_name):
         "DEVELOPERPACK_E5": "Microsoft 365 E5 开发者版",
         "SPE_E5": "Microsoft 365 E5 (商业版)",
         "SPE_E3": "Microsoft 365 E3 (商业版)",
-        "DESKLESSPACK": "Office 365 F3 (一线员工版)",
-        "FLOW_FREE": "Power Automate (免费版)",
-        "TEAMS_EXPLORATORY": "Teams 探索版"
+        "DESKLESSPACK": "Office 365 F3 (一线员工版)"
     }
     
     status_mapping = {
         "Enabled": "正常",
         "Suspended": "已禁用",
         "Warning": "警告 (即将过期)",
-        "Deleted": "已删除",
-        "LockedOut": "已被锁定"
+        "Deleted": "已删除"
     }
 
     msg_lines = []
-    # 这里使用普通文本，不加粗
-    msg_lines.append(f"👤 {account_name}") 
+    msg_lines.append(f"👤 {account_name} ({extra['org_name']})") 
+    msg_lines.append(f"- 租户创建日期: {extra['created_date']}")
+    msg_lines.append(f"- 最近开发活动: {extra['activity']}")
     
     try:
+        url = "https://graph.microsoft.com/v1.0/subscribedSkus"
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             return f"❌ {account_name}: API 请求失败 ({response.status_code})"
@@ -92,36 +123,28 @@ def get_sub_status(token, account_name):
 
         for sub in data.get('value', []):
             raw_sku = sub.get('skuPartNumber', 'Unknown').upper()
-            
-            # 筛选配置
             ignore_list = ["FLOW_FREE", "TEAMS_EXPLORATORY", "POWER_BI_STANDARD"]
             target_keywords = ["DEVELOPER", "E5", "ENTERPRISE", "PREMIUM", "OFFICE"]
             
-            is_target = any(k in raw_sku for k in target_keywords)
-            
-            if is_target and raw_sku not in ignore_list:
+            if any(k in raw_sku for k in target_keywords) and raw_sku not in ignore_list:
                 found_target = True
-                
                 raw_status = sub.get('capabilityStatus')
+                
+                # 许可证数量统计
                 prepaid = sub.get('prepaidUnits', {})
                 enabled_count = prepaid.get('enabled', 0)
-                warning_count = prepaid.get('warning', 0)
+                consumed_count = sub.get('consumedUnits', 0) # 已使用的数量
 
-                # 汉化
                 cn_name = sku_mapping.get(raw_sku, raw_sku)
                 cn_status = status_mapping.get(raw_status, raw_status)
 
-                # 图标
                 icon = "✅" 
                 if raw_status == "Warning": icon = "⏰"
                 if raw_status == "Suspended": icon = "❌"
 
                 msg_lines.append(f"- {cn_name}")
                 msg_lines.append(f"  - 状态: {icon} {cn_status}")
-                msg_lines.append(f"  - 许可: {enabled_count}")
-                
-                if warning_count > 0:
-                    msg_lines.append(f"  - ⚠️ 警告: {warning_count}")
+                msg_lines.append(f"  - 许可: {consumed_count}已分配 / {enabled_count}总量")
         
         if not found_target:
             msg_lines.append(f"⚠️ {account_name}: 未检测到 E5/E3 主订阅")
@@ -129,7 +152,7 @@ def get_sub_status(token, account_name):
     except Exception as e:
         msg_lines.append(f"❌ {account_name}: 查询异常 {str(e)}")
     
-    msg_lines.append("---") # 分割线
+    msg_lines.append("---")
     return "\n".join(msg_lines)
 
 def send_pushplus(content):
@@ -153,12 +176,10 @@ if __name__ == "__main__":
     print("🚀 开始执行多账号监控...")
     
     full_report = []
-    
-    # 【修改重点】全部使用普通文本，利用空行分割
     full_report.append("📋 Office 365 监控日报")
-    full_report.append("") # 这是一个空行，确保标题和时间不在同一行
+    full_report.append("") 
     full_report.append(f"📅 北京时间: {get_beijing_time()}")
-    full_report.append("") # 这是一个空行，确保时间与分割线分开
+    full_report.append("") 
     full_report.append("---")
     
     for acc in ACCOUNTS:
@@ -177,7 +198,6 @@ if __name__ == "__main__":
             full_report.append("❌ 获取 Token 失败，请检查 Secret 配置")
             full_report.append("---")
 
-    # 合并发送
     final_content = "\n".join(full_report)
     print(final_content)
     send_pushplus(final_content)
