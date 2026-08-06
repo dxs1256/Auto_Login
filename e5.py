@@ -67,31 +67,28 @@ def get_extra_info(token):
             info["org_name"] = org_data.get('displayName')
             info["created_date"] = org_data.get('createdDateTime', '').split('T')[0]
 
-        # 2. 查询最近审计日志 (反映开发活跃度)
+        # 2. 查询最近审计日志
         audit_url = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?$top=1"
         audit_res = requests.get(audit_url, headers=headers)
         if audit_res.status_code == 200:
             logs = audit_res.json().get('value', [])
             if logs:
-                # 获取最后一次活动的时间并简单格式化
                 raw_time = logs[0].get('activityDateTime', '')
                 info["activity"] = raw_time.replace('T', ' ').split('.')[0] + " (UTC)"
             else:
                 info["activity"] = "⚠️ 近期无活跃记录"
-        elif audit_res.status_code == 403:
-            info["activity"] = "❌ 缺少 AuditLog 权限"
     except:
         pass
     return info
 
-def get_sub_status(token, account_name):
+def get_sub_status(token, account_name, client_id):
     """查询单个账号的状态"""
     headers = {'Authorization': f'Bearer {token}'}
-    
-    # 首先获取额外信息
     extra = get_extra_info(token)
     
-    # 汉化与映射配置
+    # 对 Client ID 进行脱敏处理用于日报展示 (例如: 12345678-****-****-****-abcd)
+    masked_id = f"{client_id[:8]}-****-****-****-{client_id[-4:]}" if client_id else "Unknown"
+
     sku_mapping = {
         "ENTERPRISEPACK": "Office 365 E3 (企业版)",
         "DEVELOPERPACK_E5": "Microsoft 365 E5 开发者版",
@@ -100,15 +97,11 @@ def get_sub_status(token, account_name):
         "DESKLESSPACK": "Office 365 F3 (一线员工版)"
     }
     
-    status_mapping = {
-        "Enabled": "正常",
-        "Suspended": "已禁用",
-        "Warning": "警告 (即将过期)",
-        "Deleted": "已删除"
-    }
+    status_mapping = {"Enabled": "正常", "Suspended": "已禁用", "Warning": "警告", "Deleted": "已删除"}
 
     msg_lines = []
     msg_lines.append(f"👤 {account_name} ({extra['org_name']})") 
+    msg_lines.append(f"🆔 应用ID: {masked_id}") # 日报中增加 ID 展示
     msg_lines.append(f"- 租户创建日期: {extra['created_date']}")
     msg_lines.append(f"- 最近开发活动: {extra['activity']}")
     
@@ -123,31 +116,24 @@ def get_sub_status(token, account_name):
 
         for sub in data.get('value', []):
             raw_sku = sub.get('skuPartNumber', 'Unknown').upper()
-            ignore_list = ["FLOW_FREE", "TEAMS_EXPLORATORY", "POWER_BI_STANDARD"]
             target_keywords = ["DEVELOPER", "E5", "ENTERPRISE", "PREMIUM", "OFFICE"]
             
-            if any(k in raw_sku for k in target_keywords) and raw_sku not in ignore_list:
+            if any(k in raw_sku for k in target_keywords) and raw_sku not in ["FLOW_FREE", "TEAMS_EXPLORATORY"]:
                 found_target = True
                 raw_status = sub.get('capabilityStatus')
-                
-                # 许可证数量统计
-                prepaid = sub.get('prepaidUnits', {})
-                enabled_count = prepaid.get('enabled', 0)
-                consumed_count = sub.get('consumedUnits', 0) # 已使用的数量
+                enabled_count = sub.get('prepaidUnits', {}).get('enabled', 0)
+                consumed_count = sub.get('consumedUnits', 0)
 
                 cn_name = sku_mapping.get(raw_sku, raw_sku)
                 cn_status = status_mapping.get(raw_status, raw_status)
-
-                icon = "✅" 
-                if raw_status == "Warning": icon = "⏰"
-                if raw_status == "Suspended": icon = "❌"
+                icon = "✅" if raw_status == "Enabled" else "⏰"
 
                 msg_lines.append(f"- {cn_name}")
                 msg_lines.append(f"  - 状态: {icon} {cn_status}")
                 msg_lines.append(f"  - 许可: {consumed_count}已分配 / {enabled_count}总量")
         
         if not found_target:
-            msg_lines.append(f"⚠️ {account_name}: 未检测到 E5/E3 主订阅")
+            msg_lines.append(f"⚠️ {account_name}: 未检测到主订阅")
 
     except Exception as e:
         msg_lines.append(f"❌ {account_name}: 查询异常 {str(e)}")
@@ -157,14 +143,8 @@ def get_sub_status(token, account_name):
 
 def send_pushplus(content):
     if not PUSHPLUS_TOKEN: return
-    
     url = 'http://www.pushplus.plus/send'
-    data = {
-        "token": PUSHPLUS_TOKEN,
-        "title": "Office 365 监控日报",
-        "content": content,
-        "template": "markdown"
-    }
+    data = {"token": PUSHPLUS_TOKEN, "title": "Office 365 监控日报", "content": content, "template": "markdown"}
     try:
         requests.post(url, json=data)
         print("✅ PushPlus 推送成功")
@@ -173,31 +153,34 @@ def send_pushplus(content):
 
 # ================= 主程序 =================
 if __name__ == "__main__":
-    print("🚀 开始执行多账号监控...")
+    print(f"🚀 开始执行多账号监控... {get_beijing_time()}")
     
     full_report = []
     full_report.append("📋 Office 365 监控日报")
-    full_report.append("") 
     full_report.append(f"📅 北京时间: {get_beijing_time()}")
-    full_report.append("") 
     full_report.append("---")
     
     for acc in ACCOUNTS:
+        curr_client_id = acc['client_id']
         if not acc['tenant_id']:
-            print(f"⚠️ 跳过 {acc['name']}：未配置环境变量")
             continue
             
-        print(f"正在查询: {acc['name']} ...")
-        token = get_access_token(acc['tenant_id'], acc['client_id'], acc['client_secret'])
+        # 控制台打印：显示完整 Client ID 方便你排查
+        print(f"正在查询: {acc['name']}")
+        print(f"🔗 对应 Client ID: {curr_client_id}")
+        
+        token = get_access_token(acc['tenant_id'], curr_client_id, acc['client_secret'])
         
         if token:
-            sub_info = get_sub_status(token, acc['name'])
+            sub_info = get_sub_status(token, acc['name'], curr_client_id)
             full_report.append(sub_info)
+            print(f"✅ {acc['name']} 查询成功")
         else:
             full_report.append(f"👤 {acc['name']}")
+            full_report.append(f"🆔 应用ID: {curr_client_id}")
             full_report.append("❌ 获取 Token 失败，请检查 Secret 配置")
             full_report.append("---")
+            print(f"❌ {acc['name']} 查询失败")
 
     final_content = "\n".join(full_report)
-    print(final_content)
     send_pushplus(final_content)
