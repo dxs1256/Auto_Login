@@ -6,7 +6,7 @@
   18. EVENT_NAMES 与 sunsetbot 对齐：rise_1=今天日出，rise_2=明天日出
   19. 已过期 / 超窗口分开打日志，避免混成一句
   20. 查询 set_1/set_2/rise_1/rise_2，12 小时窗口自动过滤已过期和太远的事件
-  21. 调度改为每 3 小时（北京 02:50 起）
+  21. 调度改为每 3 小时整点（北京 02:00 起）
 */
 const axios = require('axios');
 const fs = require('fs');

@@ -4,8 +4,8 @@ name: sunset-check
 # 部署位置：仓库根目录（daily_check.js 在根目录，本文件为 .github/workflows/daily_check.yml）
 on:
   schedule:
-    # cron 为 UTC。50 */3 * * * = 北京时间 02:50 / 05:50 / 08:50 / 11:50 / 14:50 / 17:50 / 20:50 / 23:50
-    - cron: '50 */3 * * *'
+    # cron 为 UTC。0 */3 * * * = 北京时间 02:00 / 05:00 / 08:00 / 11:00 / 14:00 / 17:00 / 20:00 / 23:00
+    - cron: '0 */3 * * *'
   workflow_dispatch: {} # 支持手动触发（首次部署验证用）
 
 # 方案 B 需要 contents: write 才能提交 state.json 回仓库
