@@ -21,7 +21,10 @@ const path = require('path');
 
 // ==================== 配置区 ====================
 // 基础配置（非敏感，直接写死）
-const CITY = process.env.SUNSET_CITY || '十堰 - 茅箭区';
+// 城市名归一化：sunsetbot API 不识别「A - B」带空格的连字符格式（会返回 not_found），
+// 统一压成「A-B」；也支持直接写「十堰」「茅箭区」等简称（API 会自动匹配）
+const RAW_CITY = process.env.SUNSET_CITY || '十堰-茅箭区';
+const CITY = RAW_CITY.trim().replace(/\s*-\s*/g, '-');
 const THRESHOLD = 0.5; // 触发阈值 50%
 const MODELS = ['EC', 'GFS']; // 气象模型
 const EVENTS = ['set_1', 'set_2', 'rise_1']; // 今天落日，明天落日，明天日出
