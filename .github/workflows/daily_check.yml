@@ -4,8 +4,11 @@ name: sunset-check
 # 部署位置：仓库根目录（daily_check.js 在根目录，本文件为 .github/workflows/daily_check.yml）
 on:
   schedule:
-    # cron 为 UTC。50 9,10 * * * = 北京时间 17:50 / 18:50（十堰落日窗口，避开整点延迟）
-    - cron: '50 9,10 * * *'
+    # cron 为 UTC。50 9,40 10,20 11 * * * = 北京时间 17:50 / 18:40 / 19:20
+    # 三次运行覆盖落日窗口，趋势（上升/下降）才有足够采样
+    - cron: '50 9 * * *'
+    - cron: '40 10 * * *'
+    - cron: '20 11 * * *'
   workflow_dispatch: {} # 支持手动触发（首次部署验证用）
 
 # 方案 B 需要 contents: write 才能提交 state.json 回仓库
@@ -50,7 +53,10 @@ jobs:
         run: node daily_check.js
 
       # 方案 B：把状态文件提交回仓库，趋势与去重跨运行生效
+      # if: always()：脚本部分失败（退出码 1）时也要把已写入的观测值提交回去，
+      # 否则下次运行会基于旧基线算趋势
       - name: 提交状态文件
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
