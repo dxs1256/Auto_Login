@@ -62,18 +62,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # checkout 的 HEAD 是游离的，先建立本地分支引用再拉取远端
           git checkout ${GITHUB_REF_NAME} 2>/dev/null || git checkout -B ${GITHUB_REF_NAME} origin/${GITHUB_REF_NAME}
-          # 顺序很关键：必须先 git add（暂存），git pull --rebase 才允许在带暂存修改时执行
-          # 若先 pull 后 add，rebase 会报 "cannot pull with rebase: You have unstaged changes"
+          # 顺序很关键：必须先 commit 再 pull --rebase。
+          # rebase 要求工作区干净——未暂存修改（unstaged）和已暂存修改（index）都会被拒绝。
           git add state.json
-          git pull --rebase origin ${GITHUB_REF_NAME}
           if git diff --cached --quiet; then
             echo "状态无变化，跳过提交"
           else
             git commit -m "chore: 更新火烧云监控状态 [skip ci]"
-            # push 失败（如并发冲突）重试一次；仍失败则让任务变红，状态丢失不静默
-            git push origin HEAD:${GITHUB_REF_NAME} || {
-              echo "push 失败，rebase 后重试一次"
-              git pull --rebase origin ${GITHUB_REF_NAME}
-              git push origin HEAD:${GITHUB_REF_NAME}
-            }
           fi
+          # 此时工作区干净，可安全 rebase；冲突极少发生（concurrency 已排队），兜底取远端版本
+          if ! git pull --rebase origin ${GITHUB_REF_NAME}; then
+            echo "rebase 冲突（罕见），以远端 state.json 为准继续"
+            git checkout --theirs state.json 2>/dev/null || true
+            git add state.json
+            git rebase --continue || true
+          fi
+          # push 失败（如并发冲突）重试一次；仍失败则让任务变红，状态丢失不静默
+          git push origin HEAD:${GITHUB_REF_NAME} || {
+            echo "push 失败，rebase 后重试一次"
+            git pull --rebase origin ${GITHUB_REF_NAME}
+            git push origin HEAD:${GITHUB_REF_NAME}
+          }
