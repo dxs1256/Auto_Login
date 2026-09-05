@@ -45,7 +45,8 @@ jobs:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          SUNSET_CITY: ${{ vars.SUNSET_CITY }} # 可选：仓库 Variables 里配置城市，缺省十堰 - 茅箭区
+          # 城市名从 Secrets 读取（已确认用户配置在 Secrets）；未配置时脚本用默认值十堰-茅箭区
+          SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
         run: node daily_check.js
 
       # 方案 B：把状态文件提交回仓库，趋势与去重跨运行生效
