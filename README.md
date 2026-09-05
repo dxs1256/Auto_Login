@@ -24,7 +24,7 @@
 | **Koyeb** | `koyeb.py` | ☁️ API 级账户状态监控与活跃度检查 | 每周六 00:00 | `KOYEB_TOKENS` |
 | **福利吧** | `fuliba.js` | 🎫 自动签到，6 域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
 | **Office 365 E5** | `e5.py` | 🏢 多租户订阅状态监控与续期提醒 | 每天 00:00 | `TENANT_ID`, `CLIENT_SECRET` 等 |
-| **火烧云监控** | `daily_check.js` | 监控日落/日出概率，超阈值自动预警 | 每天 17:50 / 18:40 / 19:20 | `SUNSET_CITY` |
+| **火烧云监控** | `daily_check.js` | 监控日落/日出概率，超阈值自动预警 | 每 3 小时（北京 02:50 起） | `SUNSET_CITY` |
 | **仓库清理** | `cleanup.yml` | 🧹 自动删除旧 Workflow 记录，节省空间 | 每天 11:00 | (内置) |
 
 ---
