@@ -478,9 +478,17 @@ async function main() {
       anySuccess = true;
 
       const quality = parseQuality(data.tb_quality);
-      // 空/无法解析的 quality 跳过本次观测，不写 trendState，避免把缺失当成 0 误报跌破
       if (quality === null) {
-        console.log(` ⚠️ [${model}-${EVENT_NAMES[event]}] tb_quality 为空或无法解析，跳过该数据点（不更新趋势）`);
+        const rawQ = data.tb_quality === undefined || data.tb_quality === null
+          ? '(缺字段)'
+          : JSON.stringify(data.tb_quality);
+        const placeholder = String(data.tb_quality || '').trim() === '-'
+          || String(data.tb_event_time || '').trim() === '-';
+        if (placeholder) {
+          console.log(` ℹ️ [${model}-${EVENT_NAMES[event]}] 该模型暂无此事件预报（API 返回 "-"），跳过（不更新趋势）`);
+        } else {
+          console.log(` ⚠️ [${model}-${EVENT_NAMES[event]}] tb_quality 无法解析：${rawQ}，跳过该数据点（不更新趋势）`);
+        }
         if (QUERY_DELAY > 0) await sleep(QUERY_DELAY);
         continue;
       }
