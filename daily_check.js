@@ -5,6 +5,7 @@
   17. 通知窗口默认 12 小时
   18. EVENT_NAMES 与 sunsetbot 对齐：rise_1=今天日出，rise_2=明天日出
   19. 已过期 / 超窗口分开打日志，避免混成一句
+  20. 晚间运行查询 rise_2（明天日出），rise_1 是当天早上已过的日出
 */
 const axios = require('axios');
 const fs = require('fs');
@@ -22,7 +23,7 @@ const THRESHOLD = (() => {
   return Math.min(Math.max(v, 0), 1);
 })();
 const MODELS = ['EC', 'GFS']; // 气象模型
-const EVENTS = ['set_1', 'set_2', 'rise_1']; // 今天落日，明天落日，今天日出
+const EVENTS = ['set_1', 'set_2', 'rise_2']; // 今天落日，明天落日，明天日出
 const TIMEZONE = 'Asia/Shanghai'; // 时区
 const NOTIFY_WINDOW_HOURS = (() => {
   const v = parseFloat(process.env.SUNSET_NOTIFY_WINDOW_HOURS);
