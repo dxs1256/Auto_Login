@@ -24,7 +24,7 @@
 | **Koyeb** | `koyeb.py` | ☁️ API 级账户状态监控与活跃度检查 | 每周六 00:00 | `KOYEB_TOKENS` |
 | **福利吧** | `fuliba.js` | 🎫 自动签到，6 域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
 | **Office 365 E5** | `e5.py` | 🏢 多租户订阅状态监控与续期提醒 | 每天 00:00 | `TENANT_ID`, `CLIENT_SECRET` 等 |
-| **火烧云监控** | `daily_check.js` | 🌅 监控日落/日出概率，超阈值自动预警 | 每 3 小时 | `SUNSET_CITY` |
+| **火烧云监控** | `daily_check.js` | 监控日落/日出概率，超阈值自动预警 | 每天 17:50 / 18:40 / 19:20 | `SUNSET_CITY` |
 | **仓库清理** | `cleanup.yml` | 🧹 自动删除旧 Workflow 记录，节省空间 | 每天 11:00 | (内置) |
 
 ---
@@ -63,8 +63,8 @@
 | `KOYEB_TOKENS` | `koyeb.py` | JSON 数组，如 `[{"token":"abc"},{"token":"def"}]` |
 | `FULI_COOKIE` | `fuliba.js` | 多个账号 Cookie 用 `@` 分隔：`cookie1@cookie2` |
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `e5.py` | 微软 API 凭据。多账号可追加后缀 `_2`, `_3` (如 `TENANT_ID_2`) |
-| `SUNSET_CITY` | `daily_check.js` | 监控城市，如 `广东省 - 深圳` (默认值) |
-| `SUNSET_THRESHOLD` | `daily_check.js` | 触发报警的概率阈值，默认 `0.5` |
+| `SUNSET_CITY` | `daily_check.js` | 监控城市，如 `十堰-茅箭区`（脚本默认值）；`广东省 - 深圳` 这种带空格写法会被归一成 `广东省-深圳` |
+| `SUNSET_THRESHOLD` | `daily_check.js` | 触发报警的概率阈值，默认 `0.5`。可选配置；不配则用脚本默认值 |
 
 ---
 

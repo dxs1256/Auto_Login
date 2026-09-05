@@ -48,8 +48,10 @@ jobs:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          # 城市名从 Secrets 读取（已确认用户配置在 Secrets）；未配置时脚本用默认值十堰-茅箭区
+          # 城市名从 Secrets 读取；未配置时脚本用默认值十堰-茅箭区
           SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
+          # 可选：未配置时脚本默认 0.5
+          SUNSET_THRESHOLD: ${{ secrets.SUNSET_THRESHOLD }}
         run: node daily_check.js
 
       # 方案 B：把状态文件提交回仓库，趋势与去重跨运行生效

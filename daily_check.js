@@ -1,19 +1,11 @@
 /*
-火烧云概率监控脚本（修补版 v3.0，基于 dxs1256/Auto_Login daily_check.js v2.60）
+火烧云概率监控脚本（修补版 v3.1，基于 dxs1256/Auto_Login daily_check.js v2.60）
 运行环境：GitHub Actions（ubuntu-latest + Node 20）
-本次修补内容（对应代码审查报告）：
-  1. 状态持久化到 state.json（方案 B：提交回仓库），趋势与去重跨运行生效
-  2. 状态带 date 字段，北京时间跨天自动重置去重表（trendState 保留，跨天概率可比）
-  3. 去重改为「事件:目标日期」粒度，set_1/set_2/rise_1 一天内不重复推送
-  4. 只有至少一个通知通道发送成功才写入 notified（推送失败下次自动重试）
-  5. 「概率下降」只在跌破阈值的哪一次推送，其余下降只记日志，避免连发
-  6. 修复零值 bug：用 in 判断替代 || null，上次概率为 0 也能触发下降判定
-  7. PushPlus 改用 HTTPS，token 不再明文传输
-  8. Telegram 输出做 HTML 转义，避免 <、& 导致整条消息 400 拒收
-  9. 查询失败与「未达标」严格区分；全部模型失败时推送里明确告知数据不可用
-  10. AOD 缺失显示「未知」，不再误报为空气浑浊
-  11. 两个通知通道都未配置时启动即退出，不浪费 API 查询
-  12. 失败时 process.exitCode = 1，让 Actions 任务变红可被监控
+修补版 v3.1（相对 v3.0）：
+  13. 跨天 loadState 真正保留 trendState，只重置 notified（v3.0 注释写了但 return fresh 把趋势清空了）
+  14. tb_quality 为空/无法解析时跳过该数据点，不写入 trendState，避免误报跌破阈值
+  15. 通知窗口默认 36 小时，17:50 那次能覆盖「明天落日」；阈值可读 SUNSET_THRESHOLD
+  16. 短日期 M-D 跨年时，若补今年会早于现在超过 30 天则改用下一年
 */
 const axios = require('axios');
 const fs = require('fs');
@@ -25,11 +17,18 @@ const path = require('path');
 // 统一压成「A-B」；也支持直接写「十堰」「茅箭区」等简称（API 会自动匹配）
 const RAW_CITY = process.env.SUNSET_CITY || '十堰-茅箭区';
 const CITY = RAW_CITY.trim().replace(/\s*-\s*/g, '-');
-const THRESHOLD = 0.5; // 触发阈值 50%
+const THRESHOLD = (() => {
+  const v = parseFloat(process.env.SUNSET_THRESHOLD);
+  if (isNaN(v)) return 0.5;
+  return Math.min(Math.max(v, 0), 1);
+})();
 const MODELS = ['EC', 'GFS']; // 气象模型
 const EVENTS = ['set_1', 'set_2', 'rise_1']; // 今天落日，明天落日，明天日出
 const TIMEZONE = 'Asia/Shanghai'; // 时区
-const NOTIFY_WINDOW_HOURS = 24; // 通知窗口 24 小时（注意：与原脚本头部注释矛盾，保持 24 以免 set_2 被永远过滤）
+const NOTIFY_WINDOW_HOURS = (() => {
+  const v = parseFloat(process.env.SUNSET_NOTIFY_WINDOW_HOURS);
+  return v > 0 ? v : 36;
+})();
 const SEND_DECLINE = true; // 概率跌破阈值时通知
 
 // 重试配置
@@ -84,9 +83,14 @@ function loadState() {
         notified: (saved.notified && typeof saved.notified === 'object') ? saved.notified : {}
       };
     }
-    // 跨天（或首次运行/文件损坏）：重置去重表，保留趋势观测基线
-    console.log(`📅 状态日期为 ${saved && saved.date ? saved.date : '无'}，非今天(${today})，已重置去重表`);
-    return fresh;
+    // 跨天：重置去重表，保留趋势观测基线（跨天概率可比）
+    console.log(`📅 状态日期为 ${saved && saved.date ? saved.date : '无'}，非今天(${today})，已重置去重表，趋势基线保留`);
+    return {
+      version: saved.version || 1,
+      date: today,
+      trendState: (saved.trendState && typeof saved.trendState === 'object') ? saved.trendState : {},
+      notified: {}
+    };
   } catch (_) {
     // 首次运行或文件不存在/损坏：全新状态
     console.log(`📁 无有效状态文件，使用全新状态`);
@@ -114,11 +118,13 @@ function generateQueryId() {
 // 防御：若 API 返回百分数（如 "85%"），统一折算为 0~1 并夹取到合法区间，
 // 否则 85 会被误判为「极佳」导致每次运行都推送
 function parseQuality(qualityStr) {
-  if (!qualityStr) return 0;
-  const match = String(qualityStr).match(/[\d.]+/);
-  if (!match) return 0;
+  if (qualityStr === null || qualityStr === undefined) return null;
+  const raw = String(qualityStr).trim();
+  if (!raw || raw === '-') return null;
+  const match = raw.match(/[\d.]+/);
+  if (!match) return null;
   let v = parseFloat(match[0]);
-  if (isNaN(v)) return 0;
+  if (isNaN(v)) return null;
   if (v > 1) v = v / 100;
   return Math.min(Math.max(v, 0), 1);
 }
@@ -217,15 +223,21 @@ function parseEventTime(eventTime) {
     );
   }
 
-  // 短格式：M-D HH:mm（补当前年份；跨年场景会误判，属已知局限）
+  // 短格式：M-D HH:mm（补当前年份；若补完后早于现在超过 30 天，视为跨年用下一年）
   const matchShort = timeStr.match(/(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
   if (matchShort) {
     const [, month, day, hour, minute] = matchShort;
-    const year = now.getFullYear();
-    return new Date(
+    const make = (year) => new Date(
       `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T` +
       `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${offset}`
     );
+    let year = now.getFullYear();
+    let parsed = make(year);
+    const daysBehind = (now - parsed) / (1000 * 60 * 60 * 24);
+    if (daysBehind > 30) {
+      parsed = make(year + 1);
+    }
+    return parsed;
   }
 
   // 兜底：交给 Date 直接解析（在 UTC runner 上会按 UTC 解析，仅作最后手段）
@@ -398,7 +410,7 @@ async function sendPushPlus(content) {
       title: '火烧云预警',
       content: content,
       type: 'markdown'
-    });
+    }, { timeout: 10000 });
     // PushPlus 即使 token 无效也返回 HTTP 200，必须检查响应体 code 才算真正的送达确认
     if (response.data && response.data.code === 200) {
       console.log('✅ PushPlus 通知推送成功');
@@ -420,7 +432,7 @@ async function sendTelegram(content) {
       text: content,
       parse_mode: 'HTML',
       disable_web_page_preview: true
-    });
+    }, { timeout: 10000 });
     console.log('✅ Telegram 通知推送成功');
     return true;
   } catch (e) {
@@ -463,19 +475,20 @@ async function main() {
       }
       anySuccess = true;
 
-      const rawQuality = parseQuality(data.tb_quality);
-      // API 偶发返回空 tb_quality（本次冒烟测试 EC 模型即出现），按 0 处理并提示
-      if (!data.tb_quality || rawQuality === 0) {
-        console.log(` ⚠️ [${model}-${EVENT_NAMES[event]}] tb_quality 为空或为 0，按 0 处理`);
+      const quality = parseQuality(data.tb_quality);
+      // 空/无法解析的 quality 跳过本次观测，不写 trendState，避免把缺失当成 0 误报跌破
+      if (quality === null) {
+        console.log(` ⚠️ [${model}-${EVENT_NAMES[event]}] tb_quality 为空或无法解析，跳过该数据点（不更新趋势）`);
+        if (QUERY_DELAY > 0) await sleep(QUERY_DELAY);
+        continue;
       }
-      const quality = rawQuality;
       const qInfo = getQualityInfo(quality);
       const stateKey = `${model}_${event}`;
 
       // 修复零值 bug：用 in 判断，上次概率恰为 0 时也能正确进入趋势判定
       const previousQuality = stateKey in state.trendState ? state.trendState[stateKey] : null;
       const trendInfo = getTrendInfo(quality, previousQuality);
-      state.trendState[stateKey] = quality; // 观测值无条件记录（不管是否达标/推送）
+      state.trendState[stateKey] = quality; // 有效观测值无条件记录（不管是否达标/推送）
 
       console.log(` ✅ 成功 -> 概率：${quality} (${qInfo.text}) ${trendInfo.symbol}${trendInfo.text} | 时间：${data.tb_event_time} | AOD: ${data.tb_aod}`);
 
@@ -581,8 +594,18 @@ async function main() {
   console.log('==================== 本次监控结束 ====================\n');
 }
 
-// 修复：失败时设置非零退出码（原脚本 catch 后永远以 0 退出，Actions 上显示绿色对勾）
-main().catch(err => {
-  console.error('💥 脚本异常退出：', err);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('💥 脚本异常退出：', err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  parseQuality,
+  loadState,
+  parseEventTime,
+  getEventDateKey,
+  THRESHOLD,
+  NOTIFY_WINDOW_HOURS
+};
