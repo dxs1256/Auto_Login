@@ -1,6 +1,7 @@
 name: sunset-check
 
 # 火烧云监控：定时查询 sunsetbot.top 并推送通知，状态文件提交回仓库持久化（方案 B）
+# 部署位置：仓库根目录（daily_check.js 在根目录，本文件为 .github/workflows/daily_check.yml）
 on:
   schedule:
     # cron 为 UTC。50 9,10 * * * = 北京时间 17:50 / 18:50（十堰落日窗口，避开整点延迟）
@@ -27,15 +28,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-          cache-dependency-path: sunset-monitor/package-lock.json
+          # 仓库根目录的 package.json 没有 package-lock.json，这里禁用缓存
+          # 如需启用：先本地生成 package-lock.json 提交上去，再改回 cache: npm
+          # cache-dependency-path: package-lock.json
 
       - name: 安装依赖
-        working-directory: sunset-monitor
-        run: npm install --no-audit --no-fund
+        env:
+          # 根 package.json 里的 playwright 装运会拖浏览器下载，本脚本用不到，跳过
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        # --no-save --no-package-lock：不改动 package.json / 不生成 lock 文件，
+        # 保持工作区干净，避免影响后面 git pull --rebase
+        run: npm install axios --no-save --no-package-lock --no-audit --no-fund
 
       - name: 运行监控脚本
-        working-directory: sunset-monitor
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -45,11 +50,12 @@ jobs:
 
       # 方案 B：把状态文件提交回仓库，趋势与去重跨运行生效
       - name: 提交状态文件
-        working-directory: sunset-monitor
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          # checkout 的 HEAD 是游离的，先建立本地分支引用再拉取远端
+          git checkout ${GITHUB_REF_NAME} 2>/dev/null || git checkout -B ${GITHUB_REF_NAME} origin/${GITHUB_REF_NAME}
+          git pull --rebase origin ${GITHUB_REF_NAME}
           git add state.json
           if git diff --cached --quiet; then
             echo "状态无变化，跳过提交"
