@@ -1,39 +1,64 @@
-name: 火烧云监控
+name: sunset-check
 
+# 火烧云监控：定时查询 sunsetbot.top 并推送通知，状态文件提交回仓库持久化（方案 B）
 on:
   schedule:
-    # 三小时运行一次
-    - cron: '0 */3 * * *'
-  workflow_dispatch:
+    # cron 为 UTC。50 9,10 * * * = 北京时间 17:50 / 18:50（十堰落日窗口，避开整点延迟）
+    - cron: '50 9,10 * * *'
+  workflow_dispatch: {} # 支持手动触发（首次部署验证用）
+
+# 方案 B 需要 contents: write 才能提交 state.json 回仓库
+permissions:
+  contents: write
+
+# 防止相邻两次运行重叠导致重复推送 / git push 冲突：
+# 排队等待而不是取消（取消会漏掉一整次检查）
+concurrency:
+  group: sunset-check
+  cancel-in-progress: false
 
 jobs:
-  check-sunset:
+  check:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10 # 防止卡死的运行烧掉时长
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4 # 默认 persist-credentials: true，后续可直接 push
 
-      - name: 设置 Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: sunset-monitor/package-lock.json
 
       - name: 安装依赖
-        run: npm install axios
+        working-directory: sunset-monitor
+        run: npm install --no-audit --no-fund
 
-      - name: 运行监控
-        timeout-minutes: 5
+      - name: 运行监控脚本
+        working-directory: sunset-monitor
         env:
-          # 城市设置
-          SUNSET_CITY: ${{ secrets.SUNSET_CITY }}
-          SUNSET_THRESHOLD: '0.5'
-          
-          # PushPlus 配置
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          
-          # Telegram 配置
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          
+          SUNSET_CITY: ${{ vars.SUNSET_CITY }} # 可选：仓库 Variables 里配置城市，缺省十堰 - 茅箭区
         run: node daily_check.js
+
+      # 方案 B：把状态文件提交回仓库，趋势与去重跨运行生效
+      - name: 提交状态文件
+        working-directory: sunset-monitor
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          git add state.json
+          if git diff --cached --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "chore: 更新火烧云监控状态 [skip ci]"
+            # push 失败（如并发冲突）重试一次；仍失败则让任务变红，状态丢失不静默
+            git push origin HEAD:${GITHUB_REF_NAME} || {
+              echo "push 失败，rebase 后重试一次"
+              git pull --rebase origin ${GITHUB_REF_NAME}
+              git push origin HEAD:${GITHUB_REF_NAME}
+            }
+          fi
