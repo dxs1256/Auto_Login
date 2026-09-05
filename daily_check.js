@@ -111,10 +111,16 @@ function generateQueryId() {
 }
 
 // 从 tb_quality 字符串中解析概率数值（如 "0.5123 (51%)" -> 0.5123）
+// 防御：若 API 返回百分数（如 "85%"），统一折算为 0~1 并夹取到合法区间，
+// 否则 85 会被误判为「极佳」导致每次运行都推送
 function parseQuality(qualityStr) {
   if (!qualityStr) return 0;
   const match = String(qualityStr).match(/[\d.]+/);
-  return match ? parseFloat(match[0]) : 0;
+  if (!match) return 0;
+  let v = parseFloat(match[0]);
+  if (isNaN(v)) return 0;
+  if (v > 1) v = v / 100;
+  return Math.min(Math.max(v, 0), 1);
 }
 
 // 概率 -> 档位信息
@@ -133,6 +139,12 @@ function getAodInfo(aod) {
   if (val < 0.15) return { text: '优', emoji: '💎', desc: '空气极其通透' };
   if (val < 0.3) return { text: '良', emoji: '🌿', desc: '空气一般' };
   return { text: '差', emoji: '🌫️', desc: '空气浑浊' };
+}
+
+// 格式化 AOD 数值：缺失/非法（API 会返回 "-"）时显示「未知」，避免 NaN 泄漏进推送
+function formatAod(aod) {
+  const v = parseFloat(aod);
+  return isNaN(v) ? '未知' : v.toFixed(3);
 }
 
 // 趋势判定：previous 为 null 表示首次观测（无历史可比）
@@ -287,12 +299,10 @@ function formatForPushPlus(results, city, noData) {
       lines.push(` ${qInfo.emoji} 观赏指数：${qInfo.text} (${data.quality.toFixed(3)}) ${t.symbol}${t.text}`);
       if (data.crossedBelow) {
         lines.push(` ⚠️ 概率跌破阈值 ${THRESHOLD}，趋势转差，降低期望值`);
-      } else if (t.direction === -1) {
-        lines.push(` ${qInfo.desc}`);
       } else {
         lines.push(` ${qInfo.desc}`);
       }
-      lines.push(` 🌬️ 空气质量：${aInfo.text} (${parseFloat(data.tb_aod).toFixed(3)}) - ${aInfo.desc}`);
+      lines.push(` 🌬️ 空气质量：${aInfo.text} (${formatAod(data.tb_aod)}) - ${aInfo.desc}`);
     });
     lines.push('');
   });
@@ -335,8 +345,7 @@ function formatForTelegram(results, city, noData) {
       } else {
         lines.push(` ${escapeHtml(qInfo.desc)}`);
       }
-      const aodNum = isNaN(parseFloat(data.tb_aod)) ? '未知' : parseFloat(data.tb_aod).toFixed(3);
-      lines.push(` 💨 AOD: ${aodNum} ${aInfo.emoji}${aInfo.text} - ${escapeHtml(aInfo.desc)}`);
+      lines.push(` 💨 AOD: ${formatAod(data.tb_aod)} ${aInfo.emoji}${aInfo.text} - ${escapeHtml(aInfo.desc)}`);
     });
     lines.push('');
   });
