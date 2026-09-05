@@ -62,8 +62,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # checkout 的 HEAD 是游离的，先建立本地分支引用再拉取远端
           git checkout ${GITHUB_REF_NAME} 2>/dev/null || git checkout -B ${GITHUB_REF_NAME} origin/${GITHUB_REF_NAME}
-          git pull --rebase origin ${GITHUB_REF_NAME}
+          # 顺序很关键：必须先 git add（暂存），git pull --rebase 才允许在带暂存修改时执行
+          # 若先 pull 后 add，rebase 会报 "cannot pull with rebase: You have unstaged changes"
           git add state.json
+          git pull --rebase origin ${GITHUB_REF_NAME}
           if git diff --cached --quiet; then
             echo "状态无变化，跳过提交"
           else
