@@ -1,11 +1,10 @@
 /*
-火烧云概率监控脚本（修补版 v3.1，基于 dxs1256/Auto_Login daily_check.js v2.60）
+火烧云概率监控脚本（修补版 v3.2，基于 dxs1256/Auto_Login daily_check.js v2.60）
 运行环境：GitHub Actions（ubuntu-latest + Node 20）
-修补版 v3.1（相对 v3.0）：
-  13. 跨天 loadState 真正保留 trendState，只重置 notified（v3.0 注释写了但 return fresh 把趋势清空了）
-  14. tb_quality 为空/无法解析时跳过该数据点，不写入 trendState，避免误报跌破阈值
-  15. 通知窗口默认 36 小时，17:50 那次能覆盖「明天落日」；阈值可读 SUNSET_THRESHOLD
-  16. 短日期 M-D 跨年时，若补今年会早于现在超过 30 天则改用下一年
+修补版 v3.2（相对 v3.1）：
+  17. 通知窗口默认 12 小时
+  18. EVENT_NAMES 与 sunsetbot 对齐：rise_1=今天日出，rise_2=明天日出
+  19. 已过期 / 超窗口分开打日志，避免混成一句
 */
 const axios = require('axios');
 const fs = require('fs');
@@ -23,11 +22,11 @@ const THRESHOLD = (() => {
   return Math.min(Math.max(v, 0), 1);
 })();
 const MODELS = ['EC', 'GFS']; // 气象模型
-const EVENTS = ['set_1', 'set_2', 'rise_1']; // 今天落日，明天落日，明天日出
+const EVENTS = ['set_1', 'set_2', 'rise_1']; // 今天落日，明天落日，今天日出
 const TIMEZONE = 'Asia/Shanghai'; // 时区
 const NOTIFY_WINDOW_HOURS = (() => {
   const v = parseFloat(process.env.SUNSET_NOTIFY_WINDOW_HOURS);
-  return v > 0 ? v : 36;
+  return v > 0 ? v : 12;
 })();
 const SEND_DECLINE = true; // 概率跌破阈值时通知
 
@@ -49,8 +48,8 @@ const API_BASE = 'https://sunsetbot.top/';
 const EVENT_NAMES = {
   'set_1': '今天落日',
   'set_2': '明天落日',
-  'rise_1': '明天日出',
-  'rise_2': '后天日出'
+  'rise_1': '今天日出',
+  'rise_2': '明天日出'
 };
 const QUALITY_LEVELS = {
   excellent: { threshold: 0.8, text: '极佳', emoji: '🔥', color: 'warning', desc: '绝对值得出门观赏！' },
@@ -255,6 +254,7 @@ function isEventPassed(eventTime) {
     return false;
   }
   if (eventDate < now) {
+    console.log(` ⏭️ "${String(eventTime).trim()}" 事件已过，跳过推送`);
     return true;
   }
   const hoursUntilEvent = (eventDate - now) / (1000 * 60 * 60);
@@ -494,7 +494,6 @@ async function main() {
 
       // 事件时间合法性检查（已过期 / 超窗口 -> 跳过推送，但观测值已记录）
       if (isEventPassed(data.tb_event_time)) {
-        console.log(` ⏭️ "${EVENT_NAMES[event]}" 时间已过或超窗口 (${data.tb_event_time})，跳过推送`);
         if (QUERY_DELAY > 0) await sleep(QUERY_DELAY);
         continue;
       }
