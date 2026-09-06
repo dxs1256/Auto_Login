@@ -5,10 +5,10 @@
     "EC_set_1": 0.002,
     "EC_set_2": 0,
     "EC_rise_1": 0,
-    "GFS_set_1": 0.001,
+    "GFS_set_1": 0,
     "GFS_set_2": 0.168,
     "GFS_rise_1": 0,
-    "GFS_rise_2": 0.009,
+    "GFS_rise_2": 0.005,
     "EC_rise_2": 0
   },
   "notified": {}
