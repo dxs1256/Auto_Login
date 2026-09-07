@@ -1,17 +1,15 @@
 {
   "version": 1,
-  "date": "2026-09-07",
+  "date": "2026-09-08",
   "trendState": {
     "EC_set_1": 0.567,
     "EC_set_2": 0,
     "EC_rise_1": 0.365,
-    "GFS_set_1": 0.312,
+    "GFS_set_1": 0,
     "GFS_set_2": 0,
-    "GFS_rise_1": 0.003,
-    "GFS_rise_2": 0.039,
+    "GFS_rise_1": 0.039,
+    "GFS_rise_2": 0,
     "EC_rise_2": 0
   },
-  "notified": {
-    "set_1:2026-09-07": true
-  }
+  "notified": {}
 }
