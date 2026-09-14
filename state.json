@@ -4,10 +4,10 @@
   "trendState": {
     "EC_set_1": 0,
     "EC_set_2": 0,
-    "EC_rise_1": 0.365,
+    "EC_rise_1": 0.049,
     "GFS_set_1": 0,
     "GFS_set_2": 0,
-    "GFS_rise_1": 0.048,
+    "GFS_rise_1": 0,
     "GFS_rise_2": 0,
     "EC_rise_2": 0.049
   },
