@@ -2,12 +2,14 @@ name: 福利吧自动签到
 
 on:
   schedule:
-    - cron: '0 16,18 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
+    # 北京时间 00:00 / 02:00（UTC = 北京时间 - 8h）
+    - cron: '0 16,18 * * *'
   workflow_dispatch:
 
 jobs:
   sign:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -16,13 +18,17 @@ jobs:
         with:
           node-version: 20
 
-      - name: 安装 axios
-        run: npm install axios
+      - name: 安装依赖
+        run: npm install axios --no-audit --no-fund
 
-      - name: 执行签到（已内置 TG 通知）
+      - name: 执行签到（已内置 TG / PushPlus 通知）
         env:
           FULI_COOKIE: ${{ secrets.FULI_COOKIE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}  # 👈 必须加上这一行
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          # 可选：逗号分隔覆盖域名池，如 https://www.wnflb2023.com,https://www.wnflb99.com
+          FULI_DOMAINS: ${{ vars.FULI_DOMAINS }}
         run: node fuliba.js
+        # fuliba.js 在签到失败时以 exit 1 结束，让 Actions 变红——
+        # 旧版无论成败都打印"✅ 签到成功"且退出码为 0，问题被绿色掩盖了整整数天。
