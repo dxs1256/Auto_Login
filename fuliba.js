@@ -99,25 +99,50 @@ function sessionOf(html) {
   return { uid, hasUserNode, guestBlock, loggedIn };
 }
 
-// 把 inajax 的 XML/CDATA 响应压成纯文本
+// 把 inajax 的 XML/CDATA 响应压成纯文本。
+// 注意：Discuz 会把内联脚本直接拼在文案后面（errorhandle_/fx_chk_menu/$('...')），
+// 只去 HTML 标签会把这些 JS 一起带进通知正文，所以先整体剔除 <script>/<style> 的内容。
 function ajaxText(body) {
   const raw = String(body || '');
   const cdata = (raw.match(/<!\[CDATA\[([\s\S]*?)\]\]>/) || [])[1] || raw;
-  return cdata
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const strip = (s) =>
+    s
+      .replace(/&nbsp;/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const noScript = strip(
+    cdata
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+  );
+  // 极少数站点把整段文案塞在 <script> 里，此时退回"只去标签"的版本，避免把内容清空
+  return noScript || strip(cdata);
+}
+
+// 把回执提炼成给人看的一句话：截断 JS 尾巴、去掉 Discuz 弹层装饰前缀、限长。
+function cleanNote(text, max = 120) {
+  let t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  // 内联 JS 的起点：从第一个 JS 标记处直接截断
+  const cut = t.search(/if\s*\(\s*typeof|function\s*\(|\$\s*\(|\bvar\s+\w+\s*=|errorhandle/i);
+  if (cut > 0) t = t.slice(0, cut);
+  // 去掉弹层装饰：Discuz 的"提示信息 / 关闭"
+  t = t.replace(/^(提示信息|信息提示|提示)\s*(关闭)?\s*/i, '').trim();
+  t = t.replace(/\s+/g, ' ').trim();
+  return t.length > max ? t.slice(0, max) + '…' : t;
 }
 
 // 签到结果判定：先排除未登录，再判重复，最后才认成功。
 function judgeCheckin(text, httpStatus) {
   const t = String(text || '');
   if (!t) return { state: 'unknown', note: `接口无正文（HTTP ${httpStatus}）` };
-  if (RE_NOLOGIN.test(t)) return { state: 'nologin', note: t.slice(0, 160) };
-  if (RE_ALREADY.test(t)) return { state: 'already', note: t.slice(0, 160) };
-  if (RE_SUCCESS.test(t)) return { state: 'success', note: t.slice(0, 160) };
-  return { state: 'unknown', note: t.slice(0, 160) };
+  if (RE_NOLOGIN.test(t)) return { state: 'nologin', note: cleanNote(t) };
+  if (RE_ALREADY.test(t)) return { state: 'already', note: cleanNote(t) };
+  if (RE_SUCCESS.test(t)) return { state: 'success', note: cleanNote(t) };
+  return { state: 'unknown', note: cleanNote(t) };
 }
 
 // 只认明确数字，且数字距关键词不超过 24 个非数字字符，避免跨段误匹配。
@@ -286,7 +311,16 @@ async function main() {
 }
 
 // 导出纯函数给自测用；被 require 时不自启，直接执行时自启
-module.exports = { signOne, readStats, sessionOf, judgeCheckin, ajaxText, stripNoise, DOMAINS };
+module.exports = {
+  signOne,
+  readStats,
+  sessionOf,
+  judgeCheckin,
+  ajaxText,
+  cleanNote,
+  stripNoise,
+  DOMAINS,
+};
 
 if (require.main === module) {
   main();

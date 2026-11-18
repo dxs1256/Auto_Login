@@ -80,6 +80,28 @@ function startMock(mode, port) {
   check('语义-未登录优先于成功', lib.judgeCheckin(lib.ajaxText(wrap('<em>您需要先登录才能继续</em><p>签到成功</p>')), 200).state, 'nologin');
   check('语义-无关文案', lib.judgeCheckin(lib.ajaxText(wrap('<p>系统维护中</p>')), 200).state, 'unknown');
 
+  console.log('\n—— 第一层补充：2026-11-18 线上真实回执（含 Discuz 内联 JS 噪音）——');
+  // 这是用户实际收到的原始回执，此前 note 字段把这些 JS 一起带进了通知
+  const REAL_2026_11_18 =
+    '<div id="messagetext" class="alert_info"><p>签到成功,您今日第2080个签到,累计签到2034天!</p></div>' +
+    "<script type=\"text/javascript\">if(typeof errorhandle_=='function') {errorhandle_('签到成功,您今日第2080个签到,累计签到2034天!', {});} fx_chk_menu=true;$('fx_checkin_topb')</script>";
+  const realVerdict = lib.judgeCheckin(lib.ajaxText(wrap(REAL_2026_11_18)), 200);
+  check('真实回执 → 判定为成功', realVerdict.state, 'success');
+  check(
+    '真实回执 → note 保留人话',
+    realVerdict.note,
+    '签到成功,您今日第2080个签到,累计签到2034天!'
+  );
+  for (const junk of ['errorhandle', 'fx_chk_menu', "typeof", '$(']) {
+    check(`真实回执 → note 不含 JS 噪音 ${junk}`, realVerdict.note.includes(junk), false);
+  }
+
+  // cleanNote 的独立边界
+  check('cleanNote 截断 JS 尾巴', lib.cleanNote("签到成功,您今日第2080个签到,累计签到2034天! if(typeof errorhandle_=='function') {x()}"), '签到成功,您今日第2080个签到,累计签到2034天!');
+  check('cleanNote 去弹层前缀', lib.cleanNote('提示信息 关闭 签到成功'), '签到成功');
+  check('cleanNote 超长截断', lib.cleanNote('字'.repeat(200)).length, 121);
+  check('cleanNote 空输入', lib.cleanNote(''), '');
+
   console.log('\n—— 第二层：真实 HTTP 请求路径（内置 mock，进程内）——');
   const CASES = [
     { name: '登录+签到成功', mode: 'success', cookie: 'auth=1', wantOk: true, wantKeyword: '签到成功（接口已确认）' },
@@ -102,6 +124,10 @@ function startMock(mode, port) {
     check(`${c.name} → 含"${c.wantKeyword}"`, res.msg.includes(c.wantKeyword), true);
     if (!c.wantOk) {
       check(`${c.name} → 绝不出现"✅ 签到成功"`, res.msg.includes('✅ 签到成功'), false);
+    }
+    // 通知正文不得混入 JS（2026-11-18 线上回执暴露的问题）
+    for (const junk of ['errorhandle', 'fx_chk_menu', 'if(typeof', '$(']) {
+      check(`${c.name} → 通知正文不含 JS 噪音 ${junk}`, res.msg.includes(junk), false);
     }
     server.close();
   }
