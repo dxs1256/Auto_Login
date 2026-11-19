@@ -1,0 +1,50 @@
+name: Verify fuliba
+
+# 守住 fuliba.js 的签到判据：假成功、JS 噪音混入、未登录误判
+# 全部用例走进程内 mock + 拦截 axios，不需要真实 Cookie，也不会打真实站点（第四层除外）
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'fuliba.js'
+      - 'verify.js'
+      - 'e2e_harness.js'
+      - '.github/workflows/Verify-fuliba.yml'
+  pull_request:
+    paths:
+      - 'fuliba.js'
+      - 'verify.js'
+      - 'e2e_harness.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-fuliba-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # 仓库无 package-lock.json，不启用 npm 缓存
+          # （setup-node 的 cache 要求 lock 文件存在，否则步骤直接失败）
+
+      - name: 安装 axios
+        run: npm install axios --no-audit --no-fund
+
+      - name: 运行验收
+        env:
+          # 第四层打真实站点，CI 里跳过以避免网络抖动误报
+          SKIP_ONLINE: '1'
+        run: node verify.js
+        # verify.js 在断言失败时以 exit 1 结束，让 Actions 变红
