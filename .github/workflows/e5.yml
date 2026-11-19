@@ -3,11 +3,24 @@ name: E5 Auto Renew
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 16 * * *'     # 北京时间 00:00（UTC时间往前减8小时）
+    # UTC 16:00 = 北京次日 00:00
+    # 注意：GitHub schedule 是"尽量调度"，实测延迟 4~8 小时，不要拿它当准点任务
+    - cron: '0 16 * * *'
+
+# 最小权限：这个工作流只需读代码，不需要写仓库
+permissions:
+  contents: read
+
+# 防止 workflow_dispatch 与 schedule 撞车导致重复推送
+concurrency:
+  group: e5-check
+  cancel-in-progress: false
 
 jobs:
   check-and-notify:
     runs-on: ubuntu-24.04
+    # 兜底：脚本最坏 8 个请求 × 20s，加装依赖也不会超过 10 分钟
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -16,26 +29,33 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          # 3.9 已于 2025-10-31 EOL，升到 3.12
+          python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install 'requests>=2.31,<3'
 
       - name: Run E5 Check Script
         env:
-          # === 账号 1 (主号) ===
+          # === 账号 1 ===
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          
-          # === 账号 2 (新增的小号) ===
-          # 左边是 Python 里的变量名，右边是 GitHub 设置里的 Secret 名
+
+          # === 账号 2 ===
           TENANT_ID_2: ${{ secrets.TENANT_ID_2 }}
           CLIENT_ID_2: ${{ secrets.CLIENT_ID_2 }}
           CLIENT_SECRET_2: ${{ secrets.CLIENT_SECRET_2 }}
-          
-          # === 推送配置 ===
+
+          # === 推送 ===
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+
+          # === 可选参数 ===
+          # REQUEST_TIMEOUT: '20'
+          # MAX_RETRY: '2'
+          # ACCOUNT_NAME: '主账号'
+          # ACCOUNT_NAME_2: '小号'
         run: python e5.py
