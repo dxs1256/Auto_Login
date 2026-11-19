@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install 'requests>=2.31,<3'
+          pip install -r requirements.txt
 
       - name: Run E5 Check Script
         env:
