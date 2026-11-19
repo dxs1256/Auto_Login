@@ -6,6 +6,15 @@ on:
     - cron: '0 16,18 * * *'
   workflow_dispatch:
 
+# 最小权限：只读代码，不需要写仓库
+permissions:
+  contents: read
+
+# 防止手动触发与定时任务撞车导致重复签到
+concurrency:
+  group: fuliba-sign
+  cancel-in-progress: false
+
 jobs:
   sign:
     runs-on: ubuntu-latest
@@ -16,7 +25,10 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
+          # 仓库没有 package-lock.json，启用 npm 缓存会直接失败
+          # （与 e5.yml 上 cache: 'pip' 缺 requirements.txt 是同一类错误）
+          # 如需启用：先提交 package-lock.json 再加 cache: 'npm'
 
       - name: 安装依赖
         run: npm install axios --no-audit --no-fund
@@ -30,5 +42,5 @@ jobs:
           # 可选：逗号分隔覆盖域名池，如 https://www.wnflb2023.com,https://www.wnflb99.com
           FULI_DOMAINS: ${{ vars.FULI_DOMAINS }}
         run: node fuliba.js
-        # fuliba.js 在签到失败时以 exit 1 结束，让 Actions 变红——
+        # fuliba.js 在签到失败或推送全失败时以 exit 1 结束，让 Actions 变红——
         # 旧版无论成败都打印"✅ 签到成功"且退出码为 0，问题被绿色掩盖了整整数天。

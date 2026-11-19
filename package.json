@@ -1,12 +1,9 @@
 {
-  "name": "keepalive-netlib",
+  "name": "auto-login",
   "version": "1.0.0",
-  "main": "login.js",
-  "scripts": {
-    "start": "node login.js"
-  },
+  "private": true,
+  "description": "GitHub Actions 驱动的自用签到/监控脚本集合",
   "dependencies": {
-    "axios": "^1.6.0",
-    "playwright": "^1.40.0"
+    "axios": "^1.6.0"
   }
 }

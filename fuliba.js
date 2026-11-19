@@ -38,10 +38,14 @@ const RE_SUCCESS = /签到成功|签到完成|恭喜签到|签到获得|奖励/;
 class AuthError extends Error {}
 
 // Telegram 推送
+// 返回 true 表示已送达或未配置（跳过）；false 表示确实失败
 async function sendTG(title, content) {
-  if (!TG_BOT_TOKEN || !TG_CHAT_ID) return console.log('TG 配置缺失，跳过 TG 推送');
+  if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
+    console.log('TG 配置缺失，跳过 TG 推送');
+    return true;
+  }
   try {
-    await axios.post(
+    const resp = await axios.post(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,
       {
         chat_id: TG_CHAT_ID,
@@ -51,18 +55,29 @@ async function sendTG(title, content) {
       },
       { timeout: 10000 }
     );
-    console.log('Telegram 推送成功 🎉');
+    const body = resp && resp.data ? resp.data : {};
+    if (body.ok === true) {
+      console.log('Telegram 推送成功 🎉');
+      return true;
+    }
+    console.log(`Telegram 推送失败: ${body.description || JSON.stringify(body)}`);
+    return false;
   } catch (e) {
     console.log('Telegram 推送失败:', e.response?.data || e.message);
+    return false;
   }
 }
 
 // PushPlus 推送
+// 返回 true 表示已送达或未配置（跳过）；false 表示确实失败
 async function sendPushPlus(title, content) {
-  if (!PUSHPLUS_TOKEN) return console.log('PushPlus Token 缺失，跳过推送');
+  if (!PUSHPLUS_TOKEN) {
+    console.log('PushPlus Token 缺失，跳过推送');
+    return true;
+  }
   try {
-    await axios.post(
-      'http://www.pushplus.plus/send',
+    const resp = await axios.post(
+      'https://www.pushplus.plus/send',
       {
         token: PUSHPLUS_TOKEN,
         title: title,
@@ -71,9 +86,17 @@ async function sendPushPlus(title, content) {
       },
       { timeout: 10000 }
     );
-    console.log('PushPlus 推送成功 🎉');
+    // PushPlus 用业务码表达结果：HTTP 200 + code!=200 仍是失败（token 失效为 903）
+    const body = resp && resp.data ? resp.data : {};
+    if (body.code === 200) {
+      console.log('PushPlus 推送成功 🎉');
+      return true;
+    }
+    console.log(`PushPlus 推送失败: code=${body.code} msg=${body.msg || ''}`);
+    return false;
   } catch (e) {
     console.log('PushPlus 推送失败:', e.response?.data || e.message);
+    return false;
   }
 }
 
@@ -304,10 +327,13 @@ async function main() {
   const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const title = `${allOk ? '🔔' : '⚠️'} 福利吧签到报告（${now}）`;
 
-  await Promise.all([sendTG(title, summary), sendPushPlus(title, summary)]);
+  // 通知投递结果也纳入退出码：推送全失败时不能被签到成功掩盖
+  const delivered = await Promise.all([sendTG(title, summary), sendPushPlus(title, summary)]);
+  const notifyOk = delivered.some(Boolean);
+  if (!notifyOk) console.log('⚠️ 所有通知通道均发送失败');
 
   // 失败必须让 Actions 变红，否则"绿色成功"会继续掩盖问题
-  if (!allOk) process.exitCode = 1;
+  if (!allOk || !notifyOk) process.exitCode = 1;
 }
 
 // 导出纯函数给自测用；被 require 时不自启，直接执行时自启
@@ -320,6 +346,9 @@ module.exports = {
   cleanNote,
   stripNoise,
   DOMAINS,
+  // 通知通道：返回布尔值便于外层判断送达，也供自测断言
+  sendTG,
+  sendPushPlus,
 };
 
 if (require.main === module) {
