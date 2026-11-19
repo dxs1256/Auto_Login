@@ -12,7 +12,7 @@
 - **零成本运行**：完全依托 GitHub Actions，无需购买服务器或 VPS，7x24 小时自动巡航。
 - **多账号并发**：支持多平台多账号同时管理，配置简单，扩展性强。
 - **双通道通知**：深度适配 **Telegram** 与 **PushPlus (微信)**，精美排版，确保每一条状态都能精准触达。
-- **智能容错机制**：内置多域名自动切换（福利吧）、失败重试（火烧云）、状态掩码脱敏等高级特性。
+- **智能容错机制**：内置多域名自动切换（福利吧）、429 退避重试（E5）、状态掩码脱敏等高级特性。
 - **模块化设计**：每个任务独立脚本与工作流，互不干扰，按需开关。
 
 ---
@@ -24,8 +24,7 @@
 | **Koyeb** | `koyeb.py` | ☁️ API 级账户状态监控与活跃度检查 | 每周六 00:00 | `KOYEB_TOKENS` |
 | **福利吧** | `fuliba.js` | 🎫 自动签到，6 域名容错，提取连签天数/排名 | 每天 00:00 / 02:00 | `FULI_COOKIE` |
 | **Office 365 E5** | `e5.py` | 🏢 多租户订阅状态监控与续期提醒 | 每天 00:00 | `TENANT_ID`, `CLIENT_SECRET` 等 |
-| **火烧云监控** | `daily_check.js` | 监控日落/日出概率，超阈值自动预警 | 每 3 小时整点（北京 02:00 起） | `SUNSET_CITY` |
-| **仓库清理** | `cleanup.yml` | 🧹 自动删除旧 Workflow 记录，节省空间 | 每天 11:00 | (内置) |
+| **仓库清理** | `Cleanup-Old-History.yml` | 🧹 自动删除旧 Workflow 记录与 Release，节省空间 | 每天 11:00 | (内置) |
 
 ---
 
@@ -63,8 +62,6 @@
 | `KOYEB_TOKENS` | `koyeb.py` | JSON 数组，如 `[{"token":"abc"},{"token":"def"}]` |
 | `FULI_COOKIE` | `fuliba.js` | 多个账号 Cookie 用 `@` 分隔：`cookie1@cookie2` |
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `e5.py` | 微软 API 凭据。多账号可追加后缀 `_2`, `_3` (如 `TENANT_ID_2`) |
-| `SUNSET_CITY` | `daily_check.js` | 监控城市，如 `十堰-茅箭区`（脚本默认值）；`广东省 - 深圳` 这种带空格写法会被归一成 `广东省-深圳` |
-| `SUNSET_THRESHOLD` | `daily_check.js` | 触发报警的概率阈值，默认 `0.5`。可选配置；不配则用脚本默认值 |
 
 ---
 
