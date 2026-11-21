@@ -141,7 +141,9 @@ def get_access_token(acc):
 
 def get_extra_info(token):
     headers = {"Authorization": "Bearer " + token}
-    info = {"name": "未知组织", "date": "未知", "act": "无记录"}
+    # act_state 记录"审计日志到底查没查到"，与"查到了但没有记录"严格区分：
+    # 429/超时/权限不足时不能沿用初始值"无记录"，否则失败会被伪装成正常空态。
+    info = {"name": "未知组织", "date": "未知", "act": "未知", "act_state": "unknown"}
 
     print("  └─ 🏢 查询组织信息...")
     try:
@@ -166,12 +168,31 @@ def get_extra_info(token):
                 stamp = (logs[0].get("activityDateTime") or "").replace("T", " ").split(".")[0]
                 if stamp:
                     info["act"] = stamp + " (UTC)"
+                    info["act_state"] = "ok"
+                else:
+                    info["act"] = "记录缺少时间字段"
+                    info["act_state"] = "fail"
+            else:
+                # 查询成功且确实没有日志 —— 这才是真正的"无记录"
+                info["act"] = "无记录（查询成功）"
+                info["act_state"] = "ok"
         elif resp.status_code == 403:
-            info["act"] = "权限不足"
+            info["act"] = "权限不足（AuditLog.Read.All 未授权）"
+            info["act_state"] = "fail"
+        elif resp.status_code == 429:
+            info["act"] = "查询失败：限流 429（已重试 {} 次）".format(MAX_RETRY)
+            info["act_state"] = "fail"
         else:
+            info["act"] = "查询失败：HTTP {}".format(resp.status_code)
+            info["act_state"] = "fail"
             print("  └─ ⚠️ 审计日志查询失败 (HTTP {})".format(resp.status_code))
     except (requests.RequestException, ValueError) as exc:
+        info["act"] = "查询异常：{}".format(type(exc).__name__)
+        info["act_state"] = "fail"
         print("  └─ ⚠️ 审计日志异常: {}: {}".format(type(exc).__name__, exc))
+
+    if info["act_state"] == "fail":
+        print("  └─ ⚠️ 审计日志不可用：{}".format(info["act"]))
 
     return info
 
@@ -180,12 +201,13 @@ def get_sub_status(token, acc):
     headers = {"Authorization": "Bearer " + token}
     extra = get_extra_info(token)
 
+    act_icon = {"ok": "", "fail": "⚠️ ", "unknown": "⚠️ "}.get(extra.get("act_state"), "⚠️ ")
     lines = [
         "👤 {} ({})".format(acc["name"], extra["name"]),
         "🆔 应用 ID：",
         mask_id(acc["client_id"]),
         "- 创建日期: {}".format(extra["date"]),
-        "- 最近活动: {}".format(extra["act"]),
+        "- 最近活动: {}{}".format(act_icon, extra["act"]),
     ]
 
     print("  └─ 📦 查询订阅列表...")
@@ -280,6 +302,7 @@ def main():
 
     report = ["📋 Office 365 监控日报", "📅 时间: {}".format(bj_time), "---"]
     token_failures = 0
+    degraded = []  # 审计日志查不到但不影响主指标的情况
 
     for acc in accounts:
         print("🔍 正在处理: {} (#{})".format(acc["name"], acc["index"]))
@@ -312,6 +335,13 @@ def main():
     if token_failures:
         print("❌ 退出码 1：{} 个账号获取 Token 失败".format(token_failures))
         return 1
+
+    # 审计日志不可用时给出可见告警，但不让整个续期链条红灯
+    # —— 续期真正依赖的是 Token 与订阅状态，审计日志只影响"最近活动"的展示。
+    degraded_hits = report_text.count("⚠️ 查询") + report_text.count("⚠️ 权限不足")
+    if degraded_hits:
+        print("⚠️ 退出码 0，但有 {} 处降级：审计日志不可用（见日报中 ⚠️ 标记）".format(degraded_hits))
+        return 0
 
     print("✅ 退出码 0：全部通过")
     return 0
